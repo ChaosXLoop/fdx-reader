@@ -38,6 +38,30 @@
     --page-marker-color: #444;
   }
 
+  /* ── LIGHT MODE ────────────────────────────────────────────────────── */
+  body.light-mode {
+    --bg: #f0f0f2;
+    --surface: #ffffff;
+    --surface-raised: #e8e8ec;
+    --border: #d0d0d6;
+    --border-hover: #b0b0b8;
+    --text: #1a1a1e;
+    --text-dim: #6a6a70;
+    --accent: #9a7b1a;
+    --accent-dim: #7a5f10;
+    --accent-glow: rgba(154, 123, 26, 0.10);
+    --success: #2a9d50;
+    --error: #d03030;
+    --reader-bg: #ffffff;
+    --reader-text: #1a1a1e;
+    --reader-dim: #6a6a70;
+    --page-marker-color: #bbb;
+  }
+  body.light-mode .sticky-note textarea { color: inherit; }
+  body.light-mode .mode-badge.reading { background: rgba(42, 157, 80, 0.10); border-color: rgba(42, 157, 80, 0.3); color: var(--success); }
+  body.light-mode .mode-badge.annotating { background: rgba(208, 48, 48, 0.10); border-color: rgba(208, 48, 48, 0.3); color: var(--error); }
+  body.light-mode .mode-badge.noting { background: rgba(154, 123, 26, 0.10); border-color: rgba(154, 123, 26, 0.3); color: var(--accent); }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
@@ -105,7 +129,7 @@
   .reader-wrap { flex: 1; overflow-y: auto; overflow-x: hidden; background: var(--reader-bg); -webkit-overflow-scrolling: touch; }
   .reader { position: relative; max-width: 720px; margin: 0 auto; padding: 2rem 2.5rem 6rem; font-family: "Courier New", Courier, monospace; font-size: var(--script-font-size); line-height: 1.35; color: var(--reader-text); }
   .annotation-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
-  .annotation-layer.active { pointer-events: all; cursor: crosshair; touch-action: pan-y pinch-zoom; }
+  .annotation-layer.active { pointer-events: all; cursor: crosshair; touch-action: none; }
   .annotation-layer path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
 
   /* ── SCRIPT ELEMENTS ──────────────────────────────────────────────── */
@@ -267,6 +291,8 @@
     <button class="tb-btn" id="btnSave" title="Save (Ctrl+S)">&#x1F4BE;</button>
     <button class="tb-btn" id="btnLoad" title="Load">&#x1F4C1;</button>
     <input type="file" id="annotationFileInput" accept=".json" style="display:none"/>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btnTheme" title="Toggle light/dark mode">&#x263C;</button>
   </div>
 
   <div class="reader-wrap" id="readerWrap">
@@ -529,11 +555,33 @@ function resizeAnnotationLayer() {
 }
 window.addEventListener('resize', () => { if(scriptData){resizeAnnotationLayer();rerenderAnnotations();} });
 
+// ── THEME TOGGLE ──────────────────────────────────────────────────────────
+const btnTheme = $('btnTheme');
+let darkMode = localStorage.getItem('fdx-theme') !== 'light';
+function applyTheme() {
+  document.body.classList.toggle('light-mode', !darkMode);
+  btnTheme.textContent = darkMode ? '\u263C' : '\u263E';
+  btnTheme.title = darkMode ? 'Switch to light mode' : 'Switch to dark mode';
+  document.querySelector('meta[name="theme-color"]').content = darkMode ? '#0c0c0e' : '#ffffff';
+  localStorage.setItem('fdx-theme', darkMode ? 'dark' : 'light');
+}
+applyTheme();
+btnTheme.addEventListener('click', () => { darkMode = !darkMode; applyTheme(); });
+
 // ── POINTER EVENTS (DRAW) ──────────────────────────────────────────────────
 annotationLayer.addEventListener('pointerdown', onPointerDown);
 annotationLayer.addEventListener('pointermove', onPointerMove);
 annotationLayer.addEventListener('pointerup', onPointerUp);
 annotationLayer.addEventListener('pointercancel', onPointerUp);
+
+// Prevent browser from claiming pen/stylus events as scroll/pan gestures
+// This is critical for iPad and Boox e-reader stylus support
+readerWrap.addEventListener('touchstart', e => {
+  if (currentMode === 'draw' && e.touches.length === 1) e.preventDefault();
+}, { passive: false });
+readerWrap.addEventListener('touchmove', e => {
+  if (currentMode === 'draw' && currentStroke) e.preventDefault();
+}, { passive: false });
 
 function getRelPos(e) {
   const r = reader.getBoundingClientRect();
@@ -542,6 +590,7 @@ function getRelPos(e) {
 
 function onPointerDown(e) {
   if (currentMode!=='draw') return;
+  // Allow pen/stylus and mouse; block finger touch (so fingers can still scroll)
   if (e.pointerType==='touch') return;
   e.preventDefault(); e.stopPropagation();
   annotationLayer.setPointerCapture(e.pointerId);
