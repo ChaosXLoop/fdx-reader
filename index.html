@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>FDX Script Reader</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json"/>
+<meta name="theme-color" content="#0c0c0e"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="FDX Reader"/>
+<link rel="apple-touch-icon" href="icons/icon-192.png"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0c0c0e;
+    --surface: #161619;
+    --surface-raised: #1e1e22;
+    --border: #2a2a30;
+    --border-hover: #3a3a42;
+    --text: #e8e6e3;
+    --text-dim: #8a8a8e;
+    --accent: #c9a227;
+    --accent-dim: #9a7b1a;
+    --accent-glow: rgba(201, 162, 39, 0.12);
+    --success: #3ecf71;
+    --error: #e54d4d;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+    --reader-bg: #1a1a1e;
+    --reader-text: #d4d0ca;
+    --reader-dim: #6a6a6e;
+    --script-font-size: 14px;
+    --page-marker-color: #444;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── LANDING ──────────────────────────────────────────────────────── */
+  .landing {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: 100vh; padding: 2rem;
+  }
+  .landing.hidden { display: none; }
+  .landing h1 { font-family: var(--mono); font-size: 1.6rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 0.4rem; }
+  .landing h1 .accent { color: var(--accent); }
+  .landing .subtitle { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 2.5rem; text-align: center; line-height: 1.6; }
+  .drop-zone {
+    width: 100%; max-width: 500px; border: 2px dashed var(--border); border-radius: 14px;
+    padding: 3.5rem 2rem; text-align: center; cursor: pointer; transition: all 0.25s ease;
+    background: var(--surface); position: relative; overflow: hidden;
+  }
+  .drop-zone::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, var(--accent-glow), transparent 70%); opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); }
+  .drop-zone:hover::before, .drop-zone.drag-over::before { opacity: 1; }
+  .drop-zone .icon { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.6; }
+  .drop-zone:hover .icon { opacity: 1; }
+  .drop-zone h2 { font-family: var(--mono); font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .drop-zone p { font-size: 0.8rem; color: var(--text-dim); }
+  .drop-zone p span { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  input[type="file"] { display: none; }
+
+  /* ── APP SHELL ────────────────────────────────────────────────────── */
+  .app { display: none; flex-direction: column; height: 100vh; width: 100vw; }
+  .app.active { display: flex; }
+
+  /* ── TOOLBAR ──────────────────────────────────────────────────────── */
+  .toolbar { display: flex; align-items: center; gap: 0.25rem; padding: 0.4rem 0.75rem; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .toolbar-title { font-family: var(--mono); font-size: 0.7rem; font-weight: 600; color: var(--accent); margin-right: 0.5rem; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+  .tb-sep { width: 1px; height: 24px; background: var(--border); margin: 0 0.35rem; flex-shrink: 0; }
+  .tb-btn { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 1rem; transition: all 0.15s ease; flex-shrink: 0; font-family: var(--mono); }
+  .tb-btn:hover { background: var(--surface-raised); color: var(--text); }
+  .tb-btn.active { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
+  .tb-btn.mode-draw.active { background: rgba(229, 77, 77, 0.12); border-color: var(--error); color: var(--error); }
+  .tb-btn.mode-note.active { background: rgba(250, 204, 21, 0.12); border-color: #facc15; color: #facc15; }
+  .tb-label { font-family: var(--mono); font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; margin: 0 0.25rem; }
+  .font-size-display { font-family: var(--mono); font-size: 0.7rem; color: var(--text); min-width: 32px; text-align: center; }
+  .color-swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.active { border-color: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.3); }
+  .pen-width-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
+  .pen-width-btn:hover { background: var(--surface-raised); }
+  .pen-width-btn.active { background: var(--accent-glow); border-color: var(--accent); }
+  .pen-width-dot { border-radius: 50%; background: var(--text-dim); }
+  .pen-width-btn.active .pen-width-dot { background: var(--accent); }
+  .sub-controls { display: none; align-items: center; gap: 0.25rem; }
+  .sub-controls.visible { display: flex; }
+  .note-color-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
+  .note-color-dot:hover { transform: scale(1.2); }
+  .note-color-dot.active { border-color: #fff; box-shadow: 0 0 4px rgba(255,255,255,0.3); }
+
+  /* ── READER ───────────────────────────────────────────────────────── */
+  .reader-wrap { flex: 1; overflow-y: auto; overflow-x: hidden; background: var(--reader-bg); -webkit-overflow-scrolling: touch; }
+  .reader { position: relative; max-width: 720px; margin: 0 auto; padding: 2rem 2.5rem 6rem; font-family: "Courier New", Courier, monospace; font-size: var(--script-font-size); line-height: 1.35; color: var(--reader-text); }
+  .annotation-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+  .annotation-layer.active { pointer-events: all; cursor: crosshair; touch-action: pan-y pinch-zoom; }
+  .annotation-layer path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ── SCRIPT ELEMENTS ──────────────────────────────────────────────── */
+  .sp-title-page { text-align: center; padding: 4em 0 3em; border-bottom: 1px solid var(--border); margin-bottom: 2em; }
+  .sp-title-page .sp-title { font-size: 1.5em; font-weight: bold; text-transform: uppercase; margin-bottom: 1em; }
+  .sp-title-page .sp-byline { margin-bottom: 0.2em; color: var(--reader-dim); }
+  .sp-title-page .sp-author { font-size: 1.15em; margin-bottom: 0.8em; }
+  .sp-title-page .sp-episode { font-style: italic; color: var(--reader-dim); }
+  .sp-scene-heading { font-weight: bold; text-transform: uppercase; text-decoration: underline; margin-top: 1.8em; margin-bottom: 0.6em; }
+  .sp-action { margin-top: 0.7em; margin-bottom: 0.7em; }
+  .sp-character { text-align: center; text-transform: uppercase; margin-top: 0.8em; margin-bottom: 0; }
+  .sp-parenthetical { text-align: left; margin: 0 25%; font-style: italic; font-size: 0.8em; }
+  .sp-dialogue { text-align: left; margin: 0 20% 0.3em; }
+  .sp-transition { text-align: right; text-transform: uppercase; font-weight: bold; margin: 1.2em 0; }
+  .sp-act-break { text-align: center; text-transform: uppercase; font-weight: bold; font-size: 1.15em; margin: 2.5em 0 1.5em; padding-top: 1.5em; border-top: 2px solid var(--border); }
+  .sp-page-marker { text-align: center; font-size: 0.6em; color: var(--page-marker-color); margin: 1.8em 0; border-top: 1px solid var(--border); padding-top: 0.5em; letter-spacing: 0.15em; font-family: var(--mono); }
+
+  /* ── WORD SPANS ───────────────────────────────────────────────────── */
+  .w { cursor: default; border-radius: 2px; transition: background 0.12s; }
+  .reader.note-mode .w { cursor: pointer; }
+  .reader.note-mode .w:hover { background: rgba(250, 204, 21, 0.15); }
+
+  /* Word highlights for anchored notes */
+  .w.noted-yellow { background: rgba(251, 191, 36, 0.25); }
+  .w.noted-blue   { background: rgba(59, 130, 246, 0.2); }
+  .w.noted-green  { background: rgba(34, 197, 94, 0.2); }
+  .w.noted-pink   { background: rgba(236, 72, 153, 0.2); }
+
+  /* ── NOTE INDICATOR (collapsed) ───────────────────────────────────── */
+  .note-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 2px;
+    cursor: pointer;
+    vertical-align: super;
+    font-size: 0;
+    transition: transform 0.15s, box-shadow 0.15s;
+    position: relative;
+    top: -0.3em;
+  }
+  .note-indicator:hover {
+    transform: scale(1.6);
+    box-shadow: 0 0 6px rgba(255,255,255,0.3);
+  }
+  .note-indicator.ind-yellow { background: #fbbf24; }
+  .note-indicator.ind-blue   { background: #60a5fa; }
+  .note-indicator.ind-green  { background: #4ade80; }
+  .note-indicator.ind-pink   { background: #f472b6; }
+
+  /* ── STICKY NOTE CARD (expanded) ──────────────────────────────────── */
+  .sticky-note {
+    position: relative;
+    margin: 0.4em 0 0.6em 6%;
+    padding: 0.55em 0.75em 0.45em;
+    border-radius: 2px 6px 6px 6px;
+    font-family: var(--sans);
+    font-size: 0.82em;
+    line-height: 1.45;
+    max-width: 75%;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.35);
+    z-index: 5;
+    animation: noteIn 0.15s ease;
+  }
+  @keyframes noteIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .sticky-note::before { content: ''; position: absolute; top: 0; left: 0; width: 10px; height: 10px; border-radius: 0 0 5px 0; }
+  .sticky-note.note-yellow { background: #fef3c7; color: #78350f; border-left: 3px solid #f59e0b; }
+  .sticky-note.note-yellow::before { background: #fde68a; }
+  .sticky-note.note-blue { background: #dbeafe; color: #1e3a5f; border-left: 3px solid #3b82f6; }
+  .sticky-note.note-blue::before { background: #bfdbfe; }
+  .sticky-note.note-green { background: #dcfce7; color: #14532d; border-left: 3px solid #22c55e; }
+  .sticky-note.note-green::before { background: #bbf7d0; }
+  .sticky-note.note-pink { background: #fce7f3; color: #831843; border-left: 3px solid #ec4899; }
+  .sticky-note.note-pink::before { background: #fbcfe8; }
+  .sticky-note-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25em; }
+  .sticky-note-label { font-family: var(--mono); font-size: 0.6em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.5; }
+  .sticky-note-anchor-preview { font-family: var(--mono); font-size: 0.6em; opacity: 0.4; margin-left: 0.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+  .sticky-note-actions { display: flex; gap: 0.2em; }
+  .sticky-note-actions button { background: none; border: none; cursor: pointer; font-size: 0.75em; padding: 0.15em 0.3em; border-radius: 3px; opacity: 0.45; transition: opacity 0.15s; }
+  .sticky-note-actions button:hover { opacity: 1; }
+  .sticky-note textarea { width: 100%; background: transparent; border: none; outline: none; resize: vertical; font-family: var(--sans); font-size: 1em; line-height: 1.45; color: inherit; min-height: 1.5em; }
+  .sticky-note .note-text { white-space: pre-wrap; word-wrap: break-word; }
+
+  /* ── MODE BADGE ───────────────────────────────────────────────────── */
+  .mode-badge { position: fixed; bottom: 1rem; right: 1rem; font-family: var(--mono); font-size: 0.65rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.4rem 0.8rem; border-radius: 6px; z-index: 100; transition: all 0.2s ease; opacity: 0.85; }
+  .mode-badge.reading { background: rgba(62, 207, 113, 0.12); border: 1px solid rgba(62, 207, 113, 0.3); color: var(--success); }
+  .mode-badge.annotating { background: rgba(229, 77, 77, 0.12); border: 1px solid rgba(229, 77, 77, 0.3); color: var(--error); }
+  .mode-badge.noting { background: rgba(250, 204, 21, 0.12); border: 1px solid rgba(250, 204, 21, 0.3); color: #facc15; }
+
+  /* ── TOAST ────────────────────────────────────────────────────────── */
+  .toast { position: fixed; bottom: 3.5rem; left: 50%; transform: translateX(-50%) translateY(20px); font-family: var(--mono); font-size: 0.75rem; padding: 0.5rem 1.2rem; border-radius: 8px; background: var(--surface-raised); border: 1px solid var(--border); color: var(--text); opacity: 0; transition: all 0.3s ease; z-index: 200; pointer-events: none; white-space: nowrap; }
+  .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ── LANDING ─────────────────────────────────────────────────────── -->
+<div class="landing" id="landing">
+  <h1>FDX <span class="accent">Script Reader</span></h1>
+  <p class="subtitle">
+    Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
+    Open an .fdx file to start reading and marking up
+  </p>
+  <div class="drop-zone" id="dropZone">
+    <div class="icon">&#x1F4DC;</div>
+    <h2>Drop your .fdx file here</h2>
+    <p>or <span>browse to select</span></p>
+  </div>
+  <input type="file" id="fileInput" accept=".fdx"/>
+</div>
+
+<!-- ── APP ─────────────────────────────────────────────────────────── -->
+<div class="app" id="app">
+  <div class="toolbar">
+    <div class="toolbar-title" id="toolbarTitle"></div>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btnOpen" title="Open FDX">&#x1F4C2;</button>
+    <input type="file" id="fileInputApp" accept=".fdx" style="display:none"/>
+    <div class="tb-sep"></div>
+    <span class="tb-label">Aa</span>
+    <button class="tb-btn" id="btnFontDn">&#x2212;</button>
+    <span class="font-size-display" id="fontSizeDisplay">14</span>
+    <button class="tb-btn" id="btnFontUp">&#x002B;</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn mode-draw" id="btnDraw" title="Draw (D)">&#x270E;</button>
+    <button class="tb-btn mode-note" id="btnNote" title="Notes (N)">&#x1F4CC;</button>
+    <div class="tb-sep"></div>
+
+    <!-- Draw controls -->
+    <div class="sub-controls" id="drawControls">
+      <div class="color-swatch active" data-color="#ef4444" style="background:#ef4444"></div>
+      <div class="color-swatch" data-color="#3b82f6" style="background:#3b82f6"></div>
+      <div class="color-swatch" data-color="#22c55e" style="background:#22c55e"></div>
+      <div class="color-swatch" data-color="#facc15" style="background:#facc15"></div>
+      <div class="color-swatch" data-color="#e8e6e3" style="background:#e8e6e3"></div>
+      <div class="tb-sep"></div>
+      <button class="pen-width-btn active" data-width="2"><div class="pen-width-dot" style="width:4px;height:4px;"></div></button>
+      <button class="pen-width-btn" data-width="4"><div class="pen-width-dot" style="width:7px;height:7px;"></div></button>
+      <button class="pen-width-btn" data-width="8"><div class="pen-width-dot" style="width:11px;height:11px;"></div></button>
+      <div class="tb-sep"></div>
+    </div>
+
+    <!-- Note controls -->
+    <div class="sub-controls" id="noteControls">
+      <div class="note-color-dot active" data-notecolor="yellow" style="background:#fbbf24"></div>
+      <div class="note-color-dot" data-notecolor="blue" style="background:#60a5fa"></div>
+      <div class="note-color-dot" data-notecolor="green" style="background:#4ade80"></div>
+      <div class="note-color-dot" data-notecolor="pink" style="background:#f472b6"></div>
+      <div class="tb-sep"></div>
+    </div>
+
+    <button class="tb-btn" id="btnUndo" title="Undo">&#x21A9;</button>
+    <button class="tb-btn" id="btnClear" title="Clear all">&#x1F5D1;</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btnSave" title="Save (Ctrl+S)">&#x1F4BE;</button>
+    <button class="tb-btn" id="btnLoad" title="Load">&#x1F4C1;</button>
+    <input type="file" id="annotationFileInput" accept=".json" style="display:none"/>
+  </div>
+
+  <div class="reader-wrap" id="readerWrap">
+    <div class="reader" id="reader">
+      <div id="textLayer"></div>
+      <svg class="annotation-layer" id="annotationLayer" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+</div>
+
+<div class="mode-badge reading" id="modeBadge">Reading</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────────────
+let scriptData = null;
+let fontSize = 14;
+let currentMode = 'read'; // 'read' | 'draw' | 'note'
+
+// Draw
+let penColor = '#ef4444';
+let penWidth = 2;
+let strokes = [];
+let currentStroke = null;
+let currentPath = null;
+
+// Notes
+let notes = [];
+let noteColor = 'yellow';
+
+// ── DOM ────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const landing = $('landing'), dropZone = $('dropZone'), fileInput = $('fileInput');
+const app = $('app'), toolbarTitle = $('toolbarTitle');
+const fileInputApp = $('fileInputApp');
+const fontSizeDisplay = $('fontSizeDisplay');
+const readerWrap = $('readerWrap'), reader = $('reader');
+const textLayer = $('textLayer'), annotationLayer = $('annotationLayer');
+const modeBadge = $('modeBadge'), toast = $('toast');
+const annotationFileIn = $('annotationFileInput');
+const drawControls = $('drawControls'), noteControls = $('noteControls');
+const btnDraw = $('btnDraw'), btnNote = $('btnNote');
+
+// ── LANDING ────────────────────────────────────────────────────────────────
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) loadFDX(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFDX(fileInput.files[0]); });
+
+// ── TOOLBAR ────────────────────────────────────────────────────────────────
+$('btnOpen').addEventListener('click', () => fileInputApp.click());
+fileInputApp.addEventListener('change', () => { if (fileInputApp.files[0]) loadFDX(fileInputApp.files[0]); });
+$('btnFontDn').addEventListener('click', () => setFontSize(fontSize - 1));
+$('btnFontUp').addEventListener('click', () => setFontSize(fontSize + 1));
+btnDraw.addEventListener('click', () => setMode(currentMode === 'draw' ? 'read' : 'draw'));
+btnNote.addEventListener('click', () => setMode(currentMode === 'note' ? 'read' : 'note'));
+
+document.querySelectorAll('.color-swatch').forEach(s => s.addEventListener('click', () => {
+  document.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('active'));
+  s.classList.add('active'); penColor = s.dataset.color;
+}));
+document.querySelectorAll('.pen-width-btn').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.pen-width-btn').forEach(x => x.classList.remove('active'));
+  b.classList.add('active'); penWidth = parseInt(b.dataset.width, 10);
+}));
+document.querySelectorAll('.note-color-dot').forEach(d => d.addEventListener('click', () => {
+  document.querySelectorAll('.note-color-dot').forEach(x => x.classList.remove('active'));
+  d.classList.add('active'); noteColor = d.dataset.notecolor;
+}));
+
+$('btnUndo').addEventListener('click', undoLast);
+$('btnClear').addEventListener('click', clearAll);
+$('btnSave').addEventListener('click', saveAnnotations);
+$('btnLoad').addEventListener('click', () => annotationFileIn.click());
+annotationFileIn.addEventListener('change', loadAnnotations);
+
+document.addEventListener('selectstart', e => { if (currentMode === 'draw') e.preventDefault(); });
+
+// ── MODE ───────────────────────────────────────────────────────────────────
+function setMode(mode) {
+  currentMode = mode;
+  btnDraw.classList.toggle('active', mode === 'draw');
+  btnNote.classList.toggle('active', mode === 'note');
+  annotationLayer.classList.toggle('active', mode === 'draw');
+  drawControls.classList.toggle('visible', mode === 'draw');
+  noteControls.classList.toggle('visible', mode === 'note');
+  reader.classList.toggle('note-mode', mode === 'note');
+
+  if (mode === 'draw') { reader.style.userSelect = 'none'; reader.style.webkitUserSelect = 'none'; }
+  else { reader.style.userSelect = ''; reader.style.webkitUserSelect = ''; }
+
+  const badges = { read: 'reading', draw: 'annotating', note: 'noting' };
+  const labels = { read: 'Reading', draw: 'Drawing', note: 'Notes' };
+  modeBadge.className = 'mode-badge ' + badges[mode];
+  modeBadge.textContent = labels[mode];
+}
+
+// ── FILE LOADING ───────────────────────────────────────────────────────────
+function loadFDX(file) {
+  if (!file.name.toLowerCase().endsWith('.fdx')) { showToast('Please select a .fdx file'); return; }
+  const fr = new FileReader();
+  fr.onload = e => {
+    try {
+      scriptData = parseFDX(e.target.result, file.name);
+      computePageBreaks(scriptData.paragraphs);
+      // Show app FIRST so layout dimensions are available
+      landing.classList.add('hidden');
+      app.classList.add('active');
+      toolbarTitle.textContent = scriptData.title || file.name;
+      modeBadge.style.display = '';
+      // Defer render to next frame after layout
+      requestAnimationFrame(() => {
+        renderScript();
+        showToast(scriptData.paragraphs.length + ' elements loaded');
+      });
+    } catch (err) { showToast('Parse error: ' + err.message); }
+  };
+  fr.readAsText(file);
+}
+
+// ── FDX PARSER ─────────────────────────────────────────────────────────────
+function parseFDX(xmlString, filename) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlString, 'text/xml');
+  if (doc.querySelector('parsererror')) throw new Error('Invalid XML');
+  const titleInfo = { title: '', author: '', episode: '' };
+  const titlePage = doc.querySelector('TitlePage');
+  if (titlePage) {
+    const ct = [];
+    for (const p of titlePage.querySelectorAll('Paragraph')) {
+      const a = p.getAttribute('Alignment') || '';
+      const ts = Array.from(p.querySelectorAll('Text')).map(t => (t.textContent||'').trim()).filter(Boolean);
+      if (a === 'Center' && ts.length) ct.push(ts.join(' '));
+    }
+    for (const t of ct) {
+      if (!titleInfo.title) titleInfo.title = t;
+      else if (t.toLowerCase().startsWith('written by')) continue;
+      else if (!titleInfo.author) titleInfo.author = t;
+      else if (!titleInfo.episode) titleInfo.episode = t;
+    }
+  }
+  if (!titleInfo.title) titleInfo.title = filename.replace(/\.fdx$/i,'').replace(/[_-]/g,' ');
+  const content = doc.querySelector('Content');
+  const paragraphs = [];
+  let curPage = null;
+  if (content) {
+    for (const p of content.querySelectorAll('Paragraph')) {
+      const ptype = p.getAttribute('Type') || 'Action';
+      const sp = p.querySelector('SceneProperties');
+      if (sp) { const pg = sp.getAttribute('Page'); if (pg) curPage = pg; }
+      let text = '', plain = '';
+      for (const t of p.querySelectorAll('Text')) {
+        const c = (t.textContent||'').trim(); if (!c) continue;
+        const st = t.getAttribute('Style') || '';
+        text += st.includes('Underline') ? '<u>'+esc(c)+'</u>' : esc(c);
+        plain += c;
+      }
+      if (text.trim()) {
+        paragraphs.push({ type: ptype, text, plain, fdxPage: (ptype==='Scene Heading' && curPage) ? curPage : null });
+      }
+    }
+  }
+  return { ...titleInfo, paragraphs, sourceFilename: filename };
+}
+
+// ── PAGE BREAKS ────────────────────────────────────────────────────────────
+const ACT_KW = ['ACT ','COLD OPEN','END OF','TEASER','TAG'];
+function isActBreak(t) { return ACT_KW.some(k => stripTags(t).toUpperCase().includes(k)); }
+function computePageBreaks(pars) {
+  const LPP=56, AL=61, DL=35;
+  let lines=0, page=1;
+  for (const p of pars) {
+    const len = (p.plain||'').length||1;
+    if (p.fdxPage) { const a=parseInt(p.fdxPage,10); if (!isNaN(a)&&a>page){page=a;lines=0;} }
+    let need=0;
+    switch(p.type){
+      case 'Scene Heading': need=Math.ceil(len/AL)+2; break;
+      case 'Action': need=Math.ceil(len/AL)+1; break;
+      case 'Character': need=2; break;
+      case 'Parenthetical': need=Math.ceil(len/DL)||1; break;
+      case 'Dialogue': need=Math.ceil(len/DL)+0.3; break;
+      case 'Transition': if(isActBreak(p.text)){page++;lines=0;p.computedPage=page;continue;} need=3; break;
+      default: need=Math.ceil(len/AL)+1;
+    }
+    if (lines>0 && lines+need>LPP){page++;lines=0;}
+    p.computedPage=page; lines+=need;
+  }
+  return page;
+}
+
+// ── WORD WRAPPER ───────────────────────────────────────────────────────────
+// Wraps each word in a <span class="w"> with paragraph + word index attributes
+function wrapWords(htmlText, paragraphIdx) {
+  // Tokenize: split on whitespace, preserving HTML tags within tokens
+  const tokens = htmlText.split(/(\s+)/);
+  let wordIdx = 0;
+  let out = '';
+  for (const tok of tokens) {
+    if (/^\s+$/.test(tok)) { out += ' '; continue; }
+    if (!tok) continue;
+    out += '<span class="w" data-p="' + paragraphIdx + '" data-w="' + wordIdx + '">' + tok + '</span>';
+    wordIdx++;
+  }
+  return out;
+}
+
+// ── RENDER ─────────────────────────────────────────────────────────────────
+function renderScript() {
+  if (!scriptData) return;
+  let html = '';
+  html += '<div class="sp-title-page"><div class="sp-title">'+esc(scriptData.title)+'</div>';
+  html += '<div class="sp-byline">Written by</div><div class="sp-author">'+esc(scriptData.author)+'</div>';
+  if (scriptData.episode) html += '<div class="sp-episode">'+esc(scriptData.episode)+'</div>';
+  html += '</div>';
+
+  let lastPage = null;
+  scriptData.paragraphs.forEach((p, i) => {
+    if (p.computedPage && p.computedPage !== lastPage) {
+      if (lastPage !== null) html += '<div class="sp-page-marker">\u2014 PAGE '+p.computedPage+' \u2014</div>';
+      lastPage = p.computedPage;
+    }
+    const cls = { 'Scene Heading':'sp-scene-heading','Action':'sp-action','Character':'sp-character',
+      'Parenthetical':'sp-parenthetical','Dialogue':'sp-dialogue',
+      'Transition': isActBreak(p.text)?'sp-act-break':'sp-transition' }[p.type] || 'sp-action';
+    html += '<p class="'+cls+'" data-idx="'+i+'">'+wrapWords(p.text, i)+'</p>';
+  });
+
+  textLayer.innerHTML = html;
+  strokes = []; notes = [];
+  rerenderAnnotations();
+  resizeAnnotationLayer();
+}
+
+// ── FONT SIZE ──────────────────────────────────────────────────────────────
+function setFontSize(size) {
+  size = Math.max(8, Math.min(28, size));
+  fontSize = size;
+  fontSizeDisplay.textContent = size;
+  reader.style.setProperty('--script-font-size', size + 'px');
+  requestAnimationFrame(() => { rerenderAnnotations(); resizeAnnotationLayer(); });
+}
+
+// ── SVG LAYER SIZING ───────────────────────────────────────────────────────
+function resizeAnnotationLayer() {
+  const h = reader.scrollHeight, w = reader.clientWidth;
+  if (!w || !h) return;
+  annotationLayer.setAttribute('viewBox', '0 0 '+w+' '+h);
+  annotationLayer.style.width = w+'px';
+  annotationLayer.style.height = h+'px';
+  let hr = annotationLayer.querySelector('.hit-rect');
+  if (!hr) {
+    hr = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    hr.setAttribute('class','hit-rect');
+    hr.setAttribute('fill','transparent');
+    annotationLayer.prepend(hr);
+  }
+  hr.setAttribute('x','0'); hr.setAttribute('y','0');
+  hr.setAttribute('width', w); hr.setAttribute('height', h);
+}
+window.addEventListener('resize', () => { if(scriptData){resizeAnnotationLayer();rerenderAnnotations();} });
+
+// ── POINTER EVENTS (DRAW) ──────────────────────────────────────────────────
+annotationLayer.addEventListener('pointerdown', onPointerDown);
+annotationLayer.addEventListener('pointermove', onPointerMove);
+annotationLayer.addEventListener('pointerup', onPointerUp);
+annotationLayer.addEventListener('pointercancel', onPointerUp);
+
+function getRelPos(e) {
+  const r = reader.getBoundingClientRect();
+  return { x: e.clientX-r.left, y: e.clientY-r.top, pressure: e.pressure||0.5 };
+}
+
+function onPointerDown(e) {
+  if (currentMode!=='draw') return;
+  if (e.pointerType==='touch') return;
+  e.preventDefault(); e.stopPropagation();
+  annotationLayer.setPointerCapture(e.pointerId);
+  const pos = getRelPos(e);
+  const ai = findAnchorPara(pos.y);
+  const ae = textLayer.querySelector('[data-idx="'+ai+'"]');
+  const at = ae ? ae.offsetTop : 0;
+  currentStroke = {
+    id: 's-'+Date.now()+'-'+Math.random().toString(36).substr(2,6),
+    anchorIdx: ai, anchorOffsetY: pos.y-at, referenceFontSize: fontSize,
+    containerWidth: reader.clientWidth, color: penColor, width: penWidth,
+    points: [{rx: pos.x/reader.clientWidth, ry: 0, p: pos.pressure}]
+  };
+  currentPath = document.createElementNS('http://www.w3.org/2000/svg','path');
+  currentPath.setAttribute('stroke', penColor);
+  currentPath.setAttribute('stroke-width', penWidth);
+  currentPath.setAttribute('fill','none');
+  currentPath.setAttribute('stroke-linecap','round');
+  currentPath.setAttribute('stroke-linejoin','round');
+  currentPath.setAttribute('d','M '+pos.x.toFixed(1)+' '+pos.y.toFixed(1));
+  annotationLayer.appendChild(currentPath);
+}
+
+function onPointerMove(e) {
+  if (!currentStroke||!currentPath) return;
+  if (e.pointerType==='touch') return;
+  e.preventDefault(); e.stopPropagation();
+  const pos = getRelPos(e);
+  const ae = textLayer.querySelector('[data-idx="'+currentStroke.anchorIdx+'"]');
+  const at = ae ? ae.offsetTop : 0;
+  const oy = at + currentStroke.anchorOffsetY;
+  currentStroke.points.push({ rx: pos.x/reader.clientWidth, ry: pos.y-oy, p: pos.pressure });
+  currentPath.setAttribute('d', currentPath.getAttribute('d')+' L '+pos.x.toFixed(1)+' '+pos.y.toFixed(1));
+}
+
+function onPointerUp(e) {
+  if (!currentStroke) return;
+  if (e.pointerType==='touch') return;
+  if (currentStroke.points.length>1) strokes.push(currentStroke);
+  else if (currentPath) currentPath.remove();
+  currentStroke=null; currentPath=null;
+}
+
+function findAnchorPara(y) {
+  const els = textLayer.querySelectorAll('[data-idx]');
+  let closest=0, best=Infinity;
+  for (const el of els) {
+    const d = Math.abs(y - el.offsetTop);
+    if (d < best) { best=d; closest=parseInt(el.dataset.idx,10); }
+    if (el.offsetTop > y && d > best) break;
+  }
+  return closest;
+}
+
+// ── STROKE RENDERING ──────────────────────────────────────────────────────
+function rerenderAnnotations() {
+  annotationLayer.querySelectorAll('path').forEach(p => { if (p!==currentPath) p.remove(); });
+  const cw = reader.clientWidth;
+  if (!cw) return;
+  for (const s of strokes) {
+    const ae = textLayer.querySelector('[data-idx="'+s.anchorIdx+'"]');
+    const at = ae ? ae.offsetTop : 0;
+    const sc = fontSize / s.referenceFontSize;
+    const oy = at + s.anchorOffsetY * sc;
+    if (s.points.length < 2) continue;
+    let d = '';
+    for (let i=0; i<s.points.length; i++) {
+      const pt = s.points[i];
+      d += (i===0?'M ':' L ') + (pt.rx*cw).toFixed(1)+' '+(oy+pt.ry*sc).toFixed(1);
+    }
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',d); path.setAttribute('stroke',s.color);
+    path.setAttribute('stroke-width',s.width); path.setAttribute('fill','none');
+    path.setAttribute('stroke-linecap','round'); path.setAttribute('stroke-linejoin','round');
+    annotationLayer.appendChild(path);
+  }
+}
+
+// ── STICKY NOTES ──────────────────────────────────────────────────────────
+
+// Click handler on textLayer for creating notes
+textLayer.addEventListener('click', e => {
+  // Handle note indicator clicks in ANY mode
+  const indicator = e.target.closest('.note-indicator');
+  if (indicator) {
+    const noteId = indicator.dataset.noteId;
+    const note = notes.find(n => n.id === noteId);
+    if (note) { note.collapsed = false; rerenderNotes(); }
+    return;
+  }
+
+  // Only create new notes in note mode
+  if (currentMode !== 'note') return;
+
+  const wordEl = e.target.closest('.w');
+  if (!wordEl) return;
+
+  const pIdx = parseInt(wordEl.dataset.p, 10);
+  const wIdx = parseInt(wordEl.dataset.w, 10);
+  const wordText = wordEl.textContent;
+
+  const note = {
+    id: 'n-'+Date.now()+'-'+Math.random().toString(36).substr(2,6),
+    anchorIdx: pIdx,
+    wordIdx: wIdx,
+    anchorWord: wordText,
+    color: noteColor,
+    text: '',
+    collapsed: false,
+    createdAt: new Date().toISOString()
+  };
+  notes.push(note);
+  rerenderNotes();
+
+  // Focus the new note's textarea
+  requestAnimationFrame(() => {
+    const card = textLayer.querySelector('[data-note-id="'+note.id+'"]');
+    if (card) {
+      const ta = card.querySelector('textarea');
+      if (ta) ta.focus();
+      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+});
+
+function rerenderNotes() {
+  // Clear all note DOM (indicators, cards, highlights)
+  textLayer.querySelectorAll('.note-indicator').forEach(el => el.remove());
+  textLayer.querySelectorAll('.sticky-note').forEach(el => el.remove());
+  textLayer.querySelectorAll('.w').forEach(w => {
+    w.className = 'w'; // reset highlight classes
+  });
+
+  for (const note of notes) {
+    // Highlight the anchored word
+    const wordEl = textLayer.querySelector('.w[data-p="'+note.anchorIdx+'"][data-w="'+note.wordIdx+'"]');
+    if (wordEl) {
+      wordEl.classList.add('noted-' + note.color);
+    }
+
+    if (note.collapsed) {
+      // Insert small indicator dot after the word
+      if (wordEl) {
+        const dot = document.createElement('span');
+        dot.className = 'note-indicator ind-'+note.color;
+        dot.dataset.noteId = note.id;
+        dot.title = note.text ? note.text.substring(0, 60) : 'Empty note';
+        wordEl.after(dot);
+      }
+    } else {
+      // Expanded card — insert after the paragraph
+      const paraEl = textLayer.querySelector('[data-idx="'+note.anchorIdx+'"]');
+      if (!paraEl) continue;
+
+      const card = document.createElement('div');
+      card.className = 'sticky-note note-'+note.color;
+      card.dataset.noteId = note.id;
+
+      const hasText = !!note.text;
+
+      card.innerHTML =
+        '<div class="sticky-note-header">' +
+          '<span class="sticky-note-label">Note</span>' +
+          '<span class="sticky-note-anchor-preview">\u201C'+esc(note.anchorWord)+'\u201D</span>' +
+          '<div class="sticky-note-actions">' +
+            '<button class="note-min-btn" title="Minimize">\u2013</button>' +
+            '<button class="note-edit-btn" title="Edit">\u270E</button>' +
+            '<button class="note-del-btn" title="Delete">\u2715</button>' +
+          '</div>' +
+        '</div>' +
+        (hasText
+          ? '<div class="note-text">'+esc(note.text)+'</div>'
+          : '<textarea placeholder="Type your note\u2026"></textarea>');
+
+      // Find insertion point: after the paragraph, but after any existing cards for this paragraph
+      let insertAfter = paraEl;
+      let next = paraEl.nextElementSibling;
+      while (next && next.classList.contains('sticky-note')) {
+        insertAfter = next;
+        next = next.nextElementSibling;
+      }
+      insertAfter.after(card);
+
+      // Wire events
+      card.querySelector('.note-del-btn').addEventListener('click', () => {
+        notes = notes.filter(n => n.id !== note.id);
+        rerenderNotes();
+        resizeAnnotationLayer();
+        showToast('Note deleted');
+      });
+
+      card.querySelector('.note-min-btn').addEventListener('click', () => {
+        if (!note.text) {
+          // Can't minimize an empty note — delete it instead
+          notes = notes.filter(n => n.id !== note.id);
+          showToast('Empty note removed');
+        } else {
+          note.collapsed = true;
+        }
+        rerenderNotes();
+        resizeAnnotationLayer();
+      });
+
+      card.querySelector('.note-edit-btn').addEventListener('click', () => {
+        const textDiv = card.querySelector('.note-text');
+        if (!textDiv) return;
+        const ta = document.createElement('textarea');
+        ta.value = note.text;
+        textDiv.replaceWith(ta);
+        ta.focus();
+        wireTextarea(ta, note);
+      });
+
+      // Wire textarea for new notes
+      const ta = card.querySelector('textarea');
+      if (ta && !hasText) wireTextarea(ta, note);
+    }
+  }
+
+  resizeAnnotationLayer();
+  rerenderAnnotations();
+}
+
+function wireTextarea(ta, note) {
+  ta.addEventListener('blur', () => {
+    note.text = ta.value.trim();
+    if (!note.text) {
+      // Empty — remove
+      notes = notes.filter(n => n.id !== note.id);
+    }
+    rerenderNotes();
+    resizeAnnotationLayer();
+  });
+  // Allow Escape to finish editing
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.stopPropagation(); ta.blur(); }
+  });
+}
+
+// ── UNDO / CLEAR ───────────────────────────────────────────────────────────
+function undoLast() {
+  if (currentMode === 'draw') {
+    if (!strokes.length) { showToast('Nothing to undo'); return; }
+    strokes.pop(); rerenderAnnotations(); showToast('Stroke undone');
+  } else {
+    if (!notes.length) { showToast('Nothing to undo'); return; }
+    notes.pop(); rerenderNotes(); resizeAnnotationLayer(); showToast('Note undone');
+  }
+}
+
+function clearAll() {
+  const total = strokes.length + notes.length;
+  if (!total) { showToast('Nothing to clear'); return; }
+  if (confirm('Clear all '+total+' annotations and notes?')) {
+    strokes=[]; notes=[];
+    rerenderAnnotations(); rerenderNotes(); resizeAnnotationLayer();
+    showToast('All cleared');
+  }
+}
+
+// ── SAVE / LOAD ────────────────────────────────────────────────────────────
+function saveAnnotations() {
+  if (!strokes.length && !notes.length) { showToast('Nothing to save'); return; }
+  const data = {
+    fdxFilename: scriptData ? scriptData.sourceFilename : 'unknown.fdx',
+    title: scriptData ? scriptData.title : '',
+    savedAt: new Date().toISOString(),
+    fontSize, strokeCount: strokes.length, noteCount: notes.length,
+    strokes, notes
+  };
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const name = (scriptData ? scriptData.sourceFilename.replace(/\.fdx$/i,'') : 'annotations') + '.annotations.json';
+  if (window.showSaveFilePicker) {
+    window.showSaveFilePicker({ suggestedName: name, types: [{description:'Annotations',accept:{'application/json':['.json']}}] })
+    .then(async h => { const w=await h.createWritable(); await w.write(blob); await w.close(); showToast(strokes.length+' strokes + '+notes.length+' notes saved'); })
+    .catch(err => { if(err.name!=='AbortError') showToast('Save failed'); });
+  } else {
+    const url=URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download=name; document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    showToast(strokes.length+' strokes + '+notes.length+' notes saved');
+  }
+}
+
+function loadAnnotations() {
+  const file = annotationFileIn.files[0]; if (!file) return;
+  const fr = new FileReader();
+  fr.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.strokes) { strokes = data.strokes; rerenderAnnotations(); }
+      if (data.notes) {
+        notes = data.notes;
+        // Default collapsed=true for loaded notes
+        notes.forEach(n => { if (n.collapsed === undefined) n.collapsed = true; });
+        rerenderNotes();
+      }
+      resizeAnnotationLayer();
+      showToast((strokes.length||0)+' strokes + '+(notes.length||0)+' notes loaded');
+    } catch(err) { showToast('Failed: '+err.message); }
+  };
+  fr.readAsText(file); annotationFileIn.value='';
+}
+
+// ── HELPERS ────────────────────────────────────────────────────────────────
+function esc(s) { return s ? s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+function stripTags(s) { return s.replace(/<[^>]+>/g,''); }
+let toastTimer=null;
+function showToast(msg) { toast.textContent=msg; toast.classList.add('visible'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>toast.classList.remove('visible'),2500); }
+
+// ── KEYBOARD ───────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.target.tagName==='TEXTAREA') return;
+  if (e.ctrlKey||e.metaKey) {
+    if (e.key==='z'){e.preventDefault();undoLast();}
+    if (e.key==='s'){e.preventDefault();saveAnnotations();}
+  }
+  if (document.activeElement===document.body) {
+    if (e.key==='d') setMode(currentMode==='draw'?'read':'draw');
+    if (e.key==='n') setMode(currentMode==='note'?'read':'note');
+  }
+  if (e.key==='+'||e.key==='=') setFontSize(fontSize+1);
+  if (e.key==='-') setFontSize(fontSize-1);
+  if (e.key==='Escape') setMode('read');
+});
+
+// ── PWA SERVICE WORKER ─────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {
+      // SW registration fails when opened as local file — that's fine
+    });
+  });
+}
+</script>
+</body>
+</html>
