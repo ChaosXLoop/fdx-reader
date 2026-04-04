@@ -62,6 +62,14 @@
   body.light-mode .mode-badge.annotating { background: rgba(208, 48, 48, 0.10); border-color: rgba(208, 48, 48, 0.3); color: var(--error); }
   body.light-mode .mode-badge.noting { background: rgba(154, 123, 26, 0.10); border-color: rgba(154, 123, 26, 0.3); color: var(--accent); }
 
+  /* ── GRAYSCALE MODE ────────────────────────────────────────────────── */
+  body.grayscale-mode { filter: grayscale(1); }
+
+  /* ── ERASER ────────────────────────────────────────────────────────── */
+  .tb-btn.mode-erase.active { background: rgba(160, 160, 170, 0.15); border-color: #888; color: #aaa; }
+  .annotation-layer.erasing { pointer-events: all; cursor: not-allowed; touch-action: none; }
+  .annotation-layer path.erase-hover { opacity: 0.4; }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
@@ -259,6 +267,7 @@
     <button class="tb-btn" id="btnFontUp">&#x002B;</button>
     <div class="tb-sep"></div>
     <button class="tb-btn mode-draw" id="btnDraw" title="Draw (D)">&#x270E;</button>
+    <button class="tb-btn mode-erase" id="btnErase" title="Eraser (E)">&#x2702;</button>
     <button class="tb-btn mode-note" id="btnNote" title="Notes (N)">&#x1F4CC;</button>
     <div class="tb-sep"></div>
 
@@ -293,6 +302,7 @@
     <input type="file" id="annotationFileInput" accept=".json" style="display:none"/>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnTheme" title="Toggle light/dark mode">&#x263C;</button>
+    <button class="tb-btn" id="btnGrayscale" title="Toggle grayscale for e-readers">&#x25D1;</button>
   </div>
 
   <div class="reader-wrap" id="readerWrap">
@@ -310,7 +320,7 @@
 // ── STATE ──────────────────────────────────────────────────────────────────
 let scriptData = null;
 let fontSize = 14;
-let currentMode = 'read'; // 'read' | 'draw' | 'note'
+let currentMode = 'read'; // 'read' | 'draw' | 'erase' | 'note'
 
 // Draw
 let penColor = '#ef4444';
@@ -334,7 +344,7 @@ const textLayer = $('textLayer'), annotationLayer = $('annotationLayer');
 const modeBadge = $('modeBadge'), toast = $('toast');
 const annotationFileIn = $('annotationFileInput');
 const drawControls = $('drawControls'), noteControls = $('noteControls');
-const btnDraw = $('btnDraw'), btnNote = $('btnNote');
+const btnDraw = $('btnDraw'), btnErase = $('btnErase'), btnNote = $('btnNote');
 
 // ── LANDING ────────────────────────────────────────────────────────────────
 dropZone.addEventListener('click', () => fileInput.click());
@@ -349,6 +359,7 @@ fileInputApp.addEventListener('change', () => { if (fileInputApp.files[0]) loadF
 $('btnFontDn').addEventListener('click', () => setFontSize(fontSize - 1));
 $('btnFontUp').addEventListener('click', () => setFontSize(fontSize + 1));
 btnDraw.addEventListener('click', () => setMode(currentMode === 'draw' ? 'read' : 'draw'));
+btnErase.addEventListener('click', () => setMode(currentMode === 'erase' ? 'read' : 'erase'));
 btnNote.addEventListener('click', () => setMode(currentMode === 'note' ? 'read' : 'note'));
 
 document.querySelectorAll('.color-swatch').forEach(s => s.addEventListener('click', () => {
@@ -370,23 +381,25 @@ $('btnSave').addEventListener('click', saveAnnotations);
 $('btnLoad').addEventListener('click', () => annotationFileIn.click());
 annotationFileIn.addEventListener('change', loadAnnotations);
 
-document.addEventListener('selectstart', e => { if (currentMode === 'draw') e.preventDefault(); });
+document.addEventListener('selectstart', e => { if (currentMode === 'draw' || currentMode === 'erase') e.preventDefault(); });
 
 // ── MODE ───────────────────────────────────────────────────────────────────
 function setMode(mode) {
   currentMode = mode;
   btnDraw.classList.toggle('active', mode === 'draw');
+  btnErase.classList.toggle('active', mode === 'erase');
   btnNote.classList.toggle('active', mode === 'note');
   annotationLayer.classList.toggle('active', mode === 'draw');
+  annotationLayer.classList.toggle('erasing', mode === 'erase');
   drawControls.classList.toggle('visible', mode === 'draw');
   noteControls.classList.toggle('visible', mode === 'note');
   reader.classList.toggle('note-mode', mode === 'note');
 
-  if (mode === 'draw') { reader.style.userSelect = 'none'; reader.style.webkitUserSelect = 'none'; }
+  if (mode === 'draw' || mode === 'erase') { reader.style.userSelect = 'none'; reader.style.webkitUserSelect = 'none'; }
   else { reader.style.userSelect = ''; reader.style.webkitUserSelect = ''; }
 
-  const badges = { read: 'reading', draw: 'annotating', note: 'noting' };
-  const labels = { read: 'Reading', draw: 'Drawing', note: 'Notes' };
+  const badges = { read: 'reading', draw: 'annotating', erase: 'annotating', note: 'noting' };
+  const labels = { read: 'Reading', draw: 'Drawing', erase: 'Erasing', note: 'Notes' };
   modeBadge.className = 'mode-badge ' + badges[mode];
   modeBadge.textContent = labels[mode];
 }
@@ -568,6 +581,18 @@ function applyTheme() {
 applyTheme();
 btnTheme.addEventListener('click', () => { darkMode = !darkMode; applyTheme(); });
 
+// ── GRAYSCALE TOGGLE ─────────────────────────────────────────────────────
+const btnGrayscale = $('btnGrayscale');
+let grayscaleOn = localStorage.getItem('fdx-grayscale') === 'on';
+function applyGrayscale() {
+  document.body.classList.toggle('grayscale-mode', grayscaleOn);
+  btnGrayscale.style.opacity = grayscaleOn ? '1' : '0.5';
+  btnGrayscale.title = grayscaleOn ? 'Disable grayscale' : 'Enable grayscale for e-readers';
+  localStorage.setItem('fdx-grayscale', grayscaleOn ? 'on' : 'off');
+}
+applyGrayscale();
+btnGrayscale.addEventListener('click', () => { grayscaleOn = !grayscaleOn; applyGrayscale(); });
+
 // ── POINTER EVENTS (DRAW) ──────────────────────────────────────────────────
 annotationLayer.addEventListener('pointerdown', onPointerDown);
 annotationLayer.addEventListener('pointermove', onPointerMove);
@@ -577,10 +602,10 @@ annotationLayer.addEventListener('pointercancel', onPointerUp);
 // Prevent browser from claiming pen/stylus events as scroll/pan gestures
 // This is critical for iPad and Boox e-reader stylus support
 readerWrap.addEventListener('touchstart', e => {
-  if (currentMode === 'draw' && e.touches.length === 1) e.preventDefault();
+  if ((currentMode === 'draw' || currentMode === 'erase') && e.touches.length === 1) e.preventDefault();
 }, { passive: false });
 readerWrap.addEventListener('touchmove', e => {
-  if (currentMode === 'draw' && currentStroke) e.preventDefault();
+  if ((currentMode === 'draw' && currentStroke) || (currentMode === 'erase' && erasing)) e.preventDefault();
 }, { passive: false });
 
 function getRelPos(e) {
@@ -644,6 +669,63 @@ function findAnchorPara(y) {
   }
   return closest;
 }
+
+// ── ERASER ────────────────────────────────────────────────────────────────
+let erasing = false;
+function findStrokeAtPoint(x, y) {
+  const cw = reader.clientWidth;
+  const threshold = 12; // px tolerance
+  for (let i = strokes.length - 1; i >= 0; i--) {
+    const s = strokes[i];
+    const ae = textLayer.querySelector('[data-idx="'+s.anchorIdx+'"]');
+    const at = ae ? ae.offsetTop : 0;
+    const sc = fontSize / s.referenceFontSize;
+    const oy = at + s.anchorOffsetY * sc;
+    for (const pt of s.points) {
+      const px = pt.rx * cw;
+      const py = oy + pt.ry * sc;
+      const dx = x - px, dy = y - py;
+      if (dx*dx + dy*dy < threshold*threshold) return i;
+    }
+  }
+  return -1;
+}
+
+annotationLayer.addEventListener('pointerdown', e => {
+  if (currentMode !== 'erase') return;
+  if (e.pointerType === 'touch') return;
+  e.preventDefault(); e.stopPropagation();
+  annotationLayer.setPointerCapture(e.pointerId);
+  erasing = true;
+  const pos = getRelPos(e);
+  const idx = findStrokeAtPoint(pos.x, pos.y);
+  if (idx >= 0) { strokes.splice(idx, 1); rerenderAnnotations(); showToast('Stroke erased'); }
+});
+
+annotationLayer.addEventListener('pointermove', e => {
+  if (currentMode !== 'erase') return;
+  if (e.pointerType === 'touch') return;
+  e.preventDefault();
+  const pos = getRelPos(e);
+  // Highlight stroke under pointer
+  const paths = annotationLayer.querySelectorAll('path:not(.hit-rect)');
+  paths.forEach(p => p.classList.remove('erase-hover'));
+  const idx = findStrokeAtPoint(pos.x, pos.y);
+  if (idx >= 0 && paths[idx]) paths[idx].classList.add('erase-hover');
+  // Erase while dragging
+  if (erasing && idx >= 0) { strokes.splice(idx, 1); rerenderAnnotations(); }
+});
+
+annotationLayer.addEventListener('pointerup', e => {
+  if (currentMode !== 'erase') return;
+  if (e.pointerType === 'touch') return;
+  erasing = false;
+});
+
+annotationLayer.addEventListener('pointercancel', e => {
+  if (currentMode !== 'erase') return;
+  erasing = false;
+});
 
 // ── STROKE RENDERING ──────────────────────────────────────────────────────
 function rerenderAnnotations() {
@@ -910,6 +992,7 @@ document.addEventListener('keydown', e => {
   }
   if (document.activeElement===document.body) {
     if (e.key==='d') setMode(currentMode==='draw'?'read':'draw');
+    if (e.key==='e') setMode(currentMode==='erase'?'read':'erase');
     if (e.key==='n') setMode(currentMode==='note'?'read':'note');
   }
   if (e.key==='+'||e.key==='=') setFontSize(fontSize+1);
