@@ -67,8 +67,7 @@
 
   /* ── ERASER ────────────────────────────────────────────────────────── */
   .tb-btn.mode-erase.active { background: rgba(160, 160, 170, 0.15); border-color: #888; color: #aaa; }
-  .annotation-layer.erasing { pointer-events: all; cursor: not-allowed; touch-action: none; }
-  .annotation-layer path.erase-hover { opacity: 0.4; }
+  .annotation-layer.erasing { pointer-events: all; cursor: crosshair; touch-action: none; }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -672,23 +671,67 @@ function findAnchorPara(y) {
 
 // ── ERASER ────────────────────────────────────────────────────────────────
 let erasing = false;
-function findStrokeAtPoint(x, y) {
+const ERASER_RADIUS = 14; // px
+
+// Returns resolved screen coords for a stroke's points
+function resolveStrokePoints(s) {
   const cw = reader.clientWidth;
-  const threshold = 12; // px tolerance
-  for (let i = strokes.length - 1; i >= 0; i--) {
-    const s = strokes[i];
-    const ae = textLayer.querySelector('[data-idx="'+s.anchorIdx+'"]');
-    const at = ae ? ae.offsetTop : 0;
-    const sc = fontSize / s.referenceFontSize;
-    const oy = at + s.anchorOffsetY * sc;
-    for (const pt of s.points) {
-      const px = pt.rx * cw;
-      const py = oy + pt.ry * sc;
-      const dx = x - px, dy = y - py;
-      if (dx*dx + dy*dy < threshold*threshold) return i;
+  const ae = textLayer.querySelector('[data-idx="'+s.anchorIdx+'"]');
+  const at = ae ? ae.offsetTop : 0;
+  const sc = fontSize / s.referenceFontSize;
+  const oy = at + s.anchorOffsetY * sc;
+  return s.points.map(pt => ({ px: pt.rx * cw, py: oy + pt.ry * sc }));
+}
+
+// Erase points near (x,y) from all strokes; splits strokes into segments
+function eraseAtPoint(x, y) {
+  const r2 = ERASER_RADIUS * ERASER_RADIUS;
+  let changed = false;
+  const newStrokes = [];
+
+  for (const s of strokes) {
+    const resolved = resolveStrokePoints(s);
+    // Mark which points are hit by the eraser
+    const keep = resolved.map(p => {
+      const dx = x - p.px, dy = y - p.py;
+      return dx*dx + dy*dy >= r2;
+    });
+
+    // If no points erased, keep stroke as-is
+    if (keep.every(Boolean)) { newStrokes.push(s); continue; }
+    // If all points erased, drop the whole stroke
+    if (!keep.some(Boolean)) { changed = true; continue; }
+
+    changed = true;
+    // Split into contiguous kept segments
+    let segStart = -1;
+    for (let i = 0; i <= s.points.length; i++) {
+      if (i < s.points.length && keep[i]) {
+        if (segStart < 0) segStart = i;
+      } else {
+        if (segStart >= 0) {
+          const segPoints = s.points.slice(segStart, i);
+          if (segPoints.length >= 2) {
+            // Rebase segment: shift anchorOffsetY so first point's ry becomes 0
+            const firstRy = segPoints[0].ry;
+            const rebasedPoints = segPoints.map(pt => ({
+              rx: pt.rx, ry: pt.ry - firstRy, p: pt.p
+            }));
+            newStrokes.push({
+              ...s,
+              id: s.id + '-' + segStart,
+              anchorOffsetY: s.anchorOffsetY + firstRy,
+              points: rebasedPoints
+            });
+          }
+          segStart = -1;
+        }
+      }
     }
   }
-  return -1;
+
+  if (changed) { strokes = newStrokes; rerenderAnnotations(); }
+  return changed;
 }
 
 annotationLayer.addEventListener('pointerdown', e => {
@@ -698,8 +741,7 @@ annotationLayer.addEventListener('pointerdown', e => {
   annotationLayer.setPointerCapture(e.pointerId);
   erasing = true;
   const pos = getRelPos(e);
-  const idx = findStrokeAtPoint(pos.x, pos.y);
-  if (idx >= 0) { strokes.splice(idx, 1); rerenderAnnotations(); showToast('Stroke erased'); }
+  eraseAtPoint(pos.x, pos.y);
 });
 
 annotationLayer.addEventListener('pointermove', e => {
@@ -707,13 +749,7 @@ annotationLayer.addEventListener('pointermove', e => {
   if (e.pointerType === 'touch') return;
   e.preventDefault();
   const pos = getRelPos(e);
-  // Highlight stroke under pointer
-  const paths = annotationLayer.querySelectorAll('path:not(.hit-rect)');
-  paths.forEach(p => p.classList.remove('erase-hover'));
-  const idx = findStrokeAtPoint(pos.x, pos.y);
-  if (idx >= 0 && paths[idx]) paths[idx].classList.add('erase-hover');
-  // Erase while dragging
-  if (erasing && idx >= 0) { strokes.splice(idx, 1); rerenderAnnotations(); }
+  if (erasing) eraseAtPoint(pos.x, pos.y);
 });
 
 annotationLayer.addEventListener('pointerup', e => {
