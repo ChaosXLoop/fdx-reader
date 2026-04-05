@@ -121,6 +121,8 @@
   .color-swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
   .color-swatch:hover { transform: scale(1.15); }
   .color-swatch.active { border-color: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.3); }
+  .pen-preset-dot { border-radius: 50%; background: var(--text-dim); }
+  .preset-btn { font-size: 0.85rem; }
   .sub-controls { display: none; align-items: center; gap: 0.25rem; }
   .sub-controls.visible { display: flex; }
   .note-color-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
@@ -275,14 +277,18 @@
       <div class="color-swatch" data-color="#111111" style="background:#111111; border: 1px solid #444;"></div>
       <div class="tb-sep"></div>
       <span class="tb-label">Size</span>
+      <button class="tb-btn preset-btn" id="btnBrushMin" title="Fine pen (2px)"><div class="pen-preset-dot" style="width:4px;height:4px;"></div></button>
       <button class="tb-btn" id="btnBrushDn">&#x2212;</button>
       <span class="font-size-display" id="brushSizeDisplay">2</span>
       <button class="tb-btn" id="btnBrushUp">&#x002B;</button>
+      <button class="tb-btn preset-btn" id="btnBrushMax" title="Wide brush (25px)"><div class="pen-preset-dot" style="width:14px;height:14px;"></div></button>
       <div class="tb-sep"></div>
       <span class="tb-label">Opacity</span>
+      <button class="tb-btn preset-btn" id="btnOpacityMin" title="10% opacity">&#x25CB;</button>
       <button class="tb-btn" id="btnOpacityDn">&#x2212;</button>
       <span class="font-size-display" id="opacityDisplay">100%</span>
       <button class="tb-btn" id="btnOpacityUp">&#x002B;</button>
+      <button class="tb-btn preset-btn" id="btnOpacityMax" title="100% opacity">&#x25CF;</button>
       <div class="tb-sep"></div>
     </div>
 
@@ -375,6 +381,8 @@ function setBrushSize(size) {
 }
 $('btnBrushDn').addEventListener('click', () => setBrushSize(penWidth - 1));
 $('btnBrushUp').addEventListener('click', () => setBrushSize(penWidth + 1));
+$('btnBrushMin').addEventListener('click', () => setBrushSize(2));
+$('btnBrushMax').addEventListener('click', () => setBrushSize(25));
 
 // Opacity controls
 function setOpacity(val) {
@@ -383,6 +391,8 @@ function setOpacity(val) {
 }
 $('btnOpacityDn').addEventListener('click', () => setOpacity(penOpacity - 0.1));
 $('btnOpacityUp').addEventListener('click', () => setOpacity(penOpacity + 0.1));
+$('btnOpacityMin').addEventListener('click', () => setOpacity(0.1));
+$('btnOpacityMax').addEventListener('click', () => setOpacity(1.0));
 document.querySelectorAll('.note-color-dot').forEach(d => d.addEventListener('click', () => {
   document.querySelectorAll('.note-color-dot').forEach(x => x.classList.remove('active'));
   d.classList.add('active'); noteColor = d.dataset.notecolor;
