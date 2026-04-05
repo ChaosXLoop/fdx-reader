@@ -221,8 +221,24 @@
   .sticky-note textarea { width: 100%; background: transparent; border: none; outline: none; resize: vertical; font-family: var(--sans); font-size: 1em; line-height: 1.45; color: inherit; min-height: 1.5em; }
   .sticky-note .note-text { white-space: pre-wrap; word-wrap: break-word; }
 
+  /* ── PAGE NAV BUTTONS ─────────────────────────────────────────────── */
+  .page-nav {
+    display: none; position: fixed; bottom: 1.2rem; width: 48px; height: 48px;
+    border-radius: 50%; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-dim);
+    font-size: 1.4rem; cursor: pointer; z-index: 90;
+    opacity: 0.45; transition: opacity 0.2s, background 0.2s;
+    align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none; -webkit-user-select: none;
+  }
+  .page-nav:hover, .page-nav:active { opacity: 0.85; background: var(--surface-raised); }
+  .app.active ~ .page-nav { display: flex; }
+  .page-nav.prev { left: 1rem; }
+  .page-nav.next { right: 1rem; }
+
   /* ── MODE BADGE ───────────────────────────────────────────────────── */
-  .mode-badge { position: fixed; bottom: 1rem; right: 1rem; font-family: var(--mono); font-size: 0.65rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.4rem 0.8rem; border-radius: 6px; z-index: 100; transition: all 0.2s ease; opacity: 0.85; }
+  .mode-badge { position: fixed; bottom: 4.5rem; right: 1rem; font-family: var(--mono); font-size: 0.65rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.4rem 0.8rem; border-radius: 6px; z-index: 100; transition: all 0.2s ease; opacity: 0.85; }
   .mode-badge.reading { background: rgba(62, 207, 113, 0.12); border: 1px solid rgba(62, 207, 113, 0.3); color: var(--success); }
   .mode-badge.annotating { background: rgba(229, 77, 77, 0.12); border: 1px solid rgba(229, 77, 77, 0.3); color: var(--error); }
   .mode-badge.noting { background: rgba(250, 204, 21, 0.12); border: 1px solid rgba(250, 204, 21, 0.3); color: #facc15; }
@@ -322,6 +338,8 @@
 
 <div class="mode-badge reading" id="modeBadge">Reading</div>
 <div class="toast" id="toast"></div>
+<button class="page-nav prev" id="pageUp" title="Page up">&#x25B2;</button>
+<button class="page-nav next" id="pageDown" title="Page down">&#x25BC;</button>
 
 <script>
 // ── STATE ──────────────────────────────────────────────────────────────────
@@ -1045,6 +1063,14 @@ function esc(s) { return s ? s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 function stripTags(s) { return s.replace(/<[^>]+>/g,''); }
 let toastTimer=null;
 function showToast(msg) { toast.textContent=msg; toast.classList.add('visible'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>toast.classList.remove('visible'),2500); }
+
+// ── PAGE NAVIGATION ───────────────────────────────────────────────────────
+function pageScroll(direction) {
+  const h = readerWrap.clientHeight * 0.85; // scroll ~85% of visible height
+  readerWrap.scrollBy({ top: direction * h, behavior: 'smooth' });
+}
+$('pageUp').addEventListener('click', () => pageScroll(-1));
+$('pageDown').addEventListener('click', () => pageScroll(1));
 
 // ── KEYBOARD ───────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
