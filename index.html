@@ -121,11 +121,6 @@
   .color-swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
   .color-swatch:hover { transform: scale(1.15); }
   .color-swatch.active { border-color: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.3); }
-  .pen-width-btn { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
-  .pen-width-btn:hover { background: var(--surface-raised); }
-  .pen-width-btn.active { background: var(--accent-glow); border-color: var(--accent); }
-  .pen-width-dot { border-radius: 50%; background: var(--text-dim); }
-  .pen-width-btn.active .pen-width-dot { background: var(--accent); }
   .sub-controls { display: none; align-items: center; gap: 0.25rem; }
   .sub-controls.visible { display: flex; }
   .note-color-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
@@ -277,10 +272,17 @@
       <div class="color-swatch" data-color="#22c55e" style="background:#22c55e"></div>
       <div class="color-swatch" data-color="#facc15" style="background:#facc15"></div>
       <div class="color-swatch" data-color="#e8e6e3" style="background:#e8e6e3"></div>
+      <div class="color-swatch" data-color="#111111" style="background:#111111; border: 1px solid #444;"></div>
       <div class="tb-sep"></div>
-      <button class="pen-width-btn active" data-width="2"><div class="pen-width-dot" style="width:4px;height:4px;"></div></button>
-      <button class="pen-width-btn" data-width="4"><div class="pen-width-dot" style="width:7px;height:7px;"></div></button>
-      <button class="pen-width-btn" data-width="8"><div class="pen-width-dot" style="width:11px;height:11px;"></div></button>
+      <span class="tb-label">Size</span>
+      <button class="tb-btn" id="btnBrushDn">&#x2212;</button>
+      <span class="font-size-display" id="brushSizeDisplay">2</span>
+      <button class="tb-btn" id="btnBrushUp">&#x002B;</button>
+      <div class="tb-sep"></div>
+      <span class="tb-label">Opacity</span>
+      <button class="tb-btn" id="btnOpacityDn">&#x2212;</button>
+      <span class="font-size-display" id="opacityDisplay">100%</span>
+      <button class="tb-btn" id="btnOpacityUp">&#x002B;</button>
       <div class="tb-sep"></div>
     </div>
 
@@ -324,6 +326,7 @@ let currentMode = 'read'; // 'read' | 'draw' | 'erase' | 'note'
 // Draw
 let penColor = '#ef4444';
 let penWidth = 2;
+let penOpacity = 1.0;
 let strokes = [];
 let currentStroke = null;
 let currentPath = null;
@@ -365,10 +368,21 @@ document.querySelectorAll('.color-swatch').forEach(s => s.addEventListener('clic
   document.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('active'));
   s.classList.add('active'); penColor = s.dataset.color;
 }));
-document.querySelectorAll('.pen-width-btn').forEach(b => b.addEventListener('click', () => {
-  document.querySelectorAll('.pen-width-btn').forEach(x => x.classList.remove('active'));
-  b.classList.add('active'); penWidth = parseInt(b.dataset.width, 10);
-}));
+// Brush size controls
+function setBrushSize(size) {
+  penWidth = Math.max(1, Math.min(30, size));
+  $('brushSizeDisplay').textContent = penWidth;
+}
+$('btnBrushDn').addEventListener('click', () => setBrushSize(penWidth - 1));
+$('btnBrushUp').addEventListener('click', () => setBrushSize(penWidth + 1));
+
+// Opacity controls
+function setOpacity(val) {
+  penOpacity = Math.max(0.1, Math.min(1.0, Math.round(val * 10) / 10));
+  $('opacityDisplay').textContent = Math.round(penOpacity * 100) + '%';
+}
+$('btnOpacityDn').addEventListener('click', () => setOpacity(penOpacity - 0.1));
+$('btnOpacityUp').addEventListener('click', () => setOpacity(penOpacity + 0.1));
 document.querySelectorAll('.note-color-dot').forEach(d => d.addEventListener('click', () => {
   document.querySelectorAll('.note-color-dot').forEach(x => x.classList.remove('active'));
   d.classList.add('active'); noteColor = d.dataset.notecolor;
@@ -626,11 +640,13 @@ function onPointerDown(e) {
     id: 's-'+Date.now()+'-'+Math.random().toString(36).substr(2,6),
     anchorIdx: ai, anchorOffsetY: pos.y-at, referenceFontSize: fontSize,
     containerWidth: reader.clientWidth, color: penColor, width: penWidth,
+    opacity: penOpacity,
     points: [{rx: pos.x/reader.clientWidth, ry: 0, p: pos.pressure}]
   };
   currentPath = document.createElementNS('http://www.w3.org/2000/svg','path');
   currentPath.setAttribute('stroke', penColor);
   currentPath.setAttribute('stroke-width', penWidth);
+  currentPath.setAttribute('stroke-opacity', penOpacity);
   currentPath.setAttribute('fill','none');
   currentPath.setAttribute('stroke-linecap','round');
   currentPath.setAttribute('stroke-linejoin','round');
@@ -782,6 +798,7 @@ function rerenderAnnotations() {
     const path = document.createElementNS('http://www.w3.org/2000/svg','path');
     path.setAttribute('d',d); path.setAttribute('stroke',s.color);
     path.setAttribute('stroke-width',s.width); path.setAttribute('fill','none');
+    path.setAttribute('stroke-opacity', s.opacity !== undefined ? s.opacity : 1);
     path.setAttribute('stroke-linecap','round'); path.setAttribute('stroke-linejoin','round');
     annotationLayer.appendChild(path);
   }
