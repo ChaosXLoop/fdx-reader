@@ -109,7 +109,7 @@
   .app.active { display: flex; }
 
   /* ── TOOLBAR ──────────────────────────────────────────────────────── */
-  .toolbar { display: flex; align-items: center; gap: 0.25rem; padding: 0.4rem 0.75rem; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .toolbar { display: flex; align-items: center; gap: 0.25rem; padding: 0.4rem 0.75rem; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
   .toolbar-title { font-family: var(--mono); font-size: 0.7rem; font-weight: 600; color: var(--accent); margin-right: 0.5rem; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
   .tb-sep { width: 1px; height: 24px; background: var(--border); margin: 0 0.35rem; flex-shrink: 0; }
   .tb-btn { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 1rem; transition: all 0.15s ease; flex-shrink: 0; font-family: var(--mono); }
@@ -310,6 +310,17 @@
       <div class="tb-sep"></div>
     </div>
 
+    <!-- Erase controls (size/opacity only, no colors) -->
+    <div class="sub-controls" id="eraseControls">
+      <span class="tb-label">Size</span>
+      <button class="tb-btn preset-btn" id="btnEraseBrushMin" title="Fine eraser (2px)"><div class="pen-preset-dot" style="width:4px;height:4px;"></div></button>
+      <button class="tb-btn" id="btnEraseBrushDn">&#x2212;</button>
+      <span class="font-size-display" id="eraseBrushSizeDisplay">2</span>
+      <button class="tb-btn" id="btnEraseBrushUp">&#x002B;</button>
+      <button class="tb-btn preset-btn" id="btnEraseBrushMax" title="Wide eraser (25px)"><div class="pen-preset-dot" style="width:14px;height:14px;"></div></button>
+      <div class="tb-sep"></div>
+    </div>
+
     <!-- Note controls -->
     <div class="sub-controls" id="noteControls">
       <div class="note-color-dot active" data-notecolor="yellow" style="background:#fbbf24"></div>
@@ -353,6 +364,7 @@ let currentMode = 'read'; // 'read' | 'draw' | 'erase' | 'note'
 let penColor = '#ef4444';
 let penWidth = 2;
 let penOpacity = 1.0;
+let eraserWidth = 2;
 let strokes = [];
 let currentStroke = null;
 let currentPath = null;
@@ -371,7 +383,7 @@ const readerWrap = $('readerWrap'), reader = $('reader');
 const textLayer = $('textLayer'), annotationLayer = $('annotationLayer');
 const modeBadge = $('modeBadge'), toast = $('toast');
 const annotationFileIn = $('annotationFileInput');
-const drawControls = $('drawControls'), noteControls = $('noteControls');
+const drawControls = $('drawControls'), eraseControls = $('eraseControls'), noteControls = $('noteControls');
 const btnDraw = $('btnDraw'), btnErase = $('btnErase'), btnNote = $('btnNote');
 
 // ── LANDING ────────────────────────────────────────────────────────────────
@@ -413,6 +425,17 @@ $('btnOpacityDn').addEventListener('click', () => setOpacity(penOpacity - 0.1));
 $('btnOpacityUp').addEventListener('click', () => setOpacity(penOpacity + 0.1));
 $('btnOpacityMin').addEventListener('click', () => setOpacity(0.1));
 $('btnOpacityMax').addEventListener('click', () => setOpacity(1.0));
+
+// Eraser size controls
+function setEraserSize(size) {
+  eraserWidth = Math.max(1, Math.min(30, size));
+  $('eraseBrushSizeDisplay').textContent = eraserWidth;
+}
+$('btnEraseBrushDn').addEventListener('click', () => setEraserSize(eraserWidth - 1));
+$('btnEraseBrushUp').addEventListener('click', () => setEraserSize(eraserWidth + 1));
+$('btnEraseBrushMin').addEventListener('click', () => setEraserSize(2));
+$('btnEraseBrushMax').addEventListener('click', () => setEraserSize(25));
+
 document.querySelectorAll('.note-color-dot').forEach(d => d.addEventListener('click', () => {
   document.querySelectorAll('.note-color-dot').forEach(x => x.classList.remove('active'));
   d.classList.add('active'); noteColor = d.dataset.notecolor;
@@ -435,6 +458,7 @@ function setMode(mode) {
   annotationLayer.classList.toggle('active', mode === 'draw');
   annotationLayer.classList.toggle('erasing', mode === 'erase');
   drawControls.classList.toggle('visible', mode === 'draw');
+  eraseControls.classList.toggle('visible', mode === 'erase');
   noteControls.classList.toggle('visible', mode === 'note');
   reader.classList.toggle('note-mode', mode === 'note');
 
@@ -570,7 +594,7 @@ function renderScript() {
   let lastPage = null;
   scriptData.paragraphs.forEach((p, i) => {
     if (p.computedPage && p.computedPage !== lastPage) {
-      if (lastPage !== null) html += '<div class="sp-page-marker">\u2014 PAGE '+p.computedPage+' \u2014</div>';
+      if (lastPage !== null) html += '<div class="sp-page-marker">\u2014 PAGE '+(p.computedPage+1)+' \u2014</div>';
       lastPage = p.computedPage;
     }
     const cls = { 'Scene Heading':'sp-scene-heading','Action':'sp-action','Character':'sp-character',
@@ -719,7 +743,6 @@ function findAnchorPara(y) {
 
 // ── ERASER ────────────────────────────────────────────────────────────────
 let erasing = false;
-const ERASER_RADIUS = 14; // px
 
 // Returns resolved screen coords for a stroke's points
 function resolveStrokePoints(s) {
@@ -733,7 +756,8 @@ function resolveStrokePoints(s) {
 
 // Erase points near (x,y) from all strokes; splits strokes into segments
 function eraseAtPoint(x, y) {
-  const r2 = ERASER_RADIUS * ERASER_RADIUS;
+  const radius = eraserWidth + 6; // eraser hit area scales with brush size
+  const r2 = radius * radius;
   let changed = false;
   const newStrokes = [];
 
