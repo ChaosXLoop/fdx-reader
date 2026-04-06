@@ -546,10 +546,10 @@ const ACT_KW = ['ACT ','COLD OPEN','END OF','TEASER','TAG'];
 function isActBreak(t) { return ACT_KW.some(k => stripTags(t).toUpperCase().includes(k)); }
 function computePageBreaks(pars) {
   const LPP=56, AL=61, DL=35;
-  let lines=0, page=1;
+  let lines=0, page=0;
   for (const p of pars) {
     const len = (p.plain||'').length||1;
-    if (p.fdxPage) { const a=parseInt(p.fdxPage,10); if (!isNaN(a)&&a>page){page=a;lines=0;} }
+    if (p.fdxPage) { const a=parseInt(p.fdxPage,10)-1; if (!isNaN(a)&&a>page){page=a;lines=0;} }
     let need=0;
     switch(p.type){
       case 'Scene Heading': need=Math.ceil(len/AL)+2; break;
@@ -594,7 +594,7 @@ function renderScript() {
   let lastPage = null;
   scriptData.paragraphs.forEach((p, i) => {
     if (p.computedPage && p.computedPage !== lastPage) {
-      if (lastPage !== null) html += '<div class="sp-page-marker">\u2014 PAGE '+(p.computedPage+1)+' \u2014</div>';
+      if (lastPage !== null) html += '<div class="sp-page-marker">\u2014 PAGE '+p.computedPage+' \u2014</div>';
       lastPage = p.computedPage;
     }
     const cls = { 'Scene Heading':'sp-scene-heading','Action':'sp-action','Character':'sp-character',
