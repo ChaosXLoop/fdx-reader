@@ -13,6 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="FDX Reader"/>
 <link rel="apple-touch-icon" href="icons/icon-192.png"/>
 <meta name="mobile-web-app-capable" content="yes"/>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
 
@@ -258,7 +259,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx file to start reading and marking up
   </p>
-  <p class="version-label">v1.3</p>
+  <p class="version-label">v1.4</p>
   <div class="drop-zone" id="dropZone">
     <div class="icon">&#x1F4DC;</div>
     <h2>Drop your .fdx file here</h2>
@@ -336,6 +337,8 @@
     <button class="tb-btn" id="btnSave" title="Save (Ctrl+S)">&#x1F4BE;</button>
     <button class="tb-btn" id="btnLoad" title="Load">&#x1F4C1;</button>
     <input type="file" id="annotationFileInput" accept=".json" style="display:none"/>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btnEpub" title="Export to EPUB">&#x1F4D6;</button>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnTheme" title="Toggle light/dark mode">&#x263C;</button>
     <button class="tb-btn" id="btnGrayscale" title="Toggle grayscale for e-readers">&#x25D1;</button>
@@ -446,6 +449,7 @@ $('btnClear').addEventListener('click', clearAll);
 $('btnSave').addEventListener('click', saveAnnotations);
 $('btnLoad').addEventListener('click', () => annotationFileIn.click());
 annotationFileIn.addEventListener('change', loadAnnotations);
+$('btnEpub').addEventListener('click', exportEpub);
 
 document.addEventListener('selectstart', e => { if (currentMode === 'draw' || currentMode === 'erase') e.preventDefault(); });
 
@@ -1084,6 +1088,180 @@ function loadAnnotations() {
     } catch(err) { showToast('Failed: '+err.message); }
   };
   fr.readAsText(file); annotationFileIn.value='';
+}
+
+// ── EPUB EXPORT ───────────────────────────────────────────────────────────
+async function exportEpub() {
+  if (!scriptData) { showToast('No script loaded'); return; }
+  if (typeof JSZip === 'undefined') { showToast('EPUB library not loaded'); return; }
+
+  showToast('Building EPUB\u2026');
+
+  const uuid = 'urn:uuid:' + ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+    (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c/4).toString(16)
+  );
+  const title = scriptData.title || 'Untitled';
+  const author = scriptData.author || 'Unknown';
+  const episode = scriptData.episode || '';
+  const now = new Date().toISOString().split('.')[0] + 'Z';
+
+  // Build script body XHTML
+  let body = '';
+  let lastPage = null;
+  for (const p of scriptData.paragraphs) {
+    if (p.computedPage && p.computedPage !== lastPage) {
+      if (lastPage !== null) body += '<p class="page-marker">&#x2014; PAGE '+p.computedPage+' &#x2014;</p>\n';
+      lastPage = p.computedPage;
+    }
+    const cls = {
+      'Scene Heading': 'scene-heading',
+      'Action': 'action',
+      'Character': 'character',
+      'Parenthetical': 'parenthetical',
+      'Dialogue': 'dialogue',
+      'Transition': isActBreak(p.text) ? 'act-break' : 'transition'
+    }[p.type] || 'action';
+    // Strip our word spans — we don't want them in the EPUB
+    body += '<p class="'+cls+'">'+p.text+'</p>\n';
+  }
+
+  const chapterXhtml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head>
+<title>${esc(title)}</title>
+<link rel="stylesheet" type="text/css" href="style.css"/>
+</head>
+<body>
+<section epub:type="titlepage" class="title-page">
+<h1>${esc(title)}</h1>
+<p class="byline">Written by</p>
+<p class="author">${esc(author)}</p>
+${episode ? '<p class="episode">'+esc(episode)+'</p>' : ''}
+</section>
+<section epub:type="bodymatter" class="script">
+${body}
+</section>
+</body>
+</html>`;
+
+  const css =
+`@page { margin: 1em; }
+body { font-family: "Courier New", Courier, monospace; font-size: 1em; line-height: 1.35; margin: 0; padding: 0; }
+.title-page { text-align: center; padding: 4em 0 3em; page-break-after: always; }
+.title-page h1 { font-size: 1.5em; text-transform: uppercase; margin-bottom: 1em; }
+.title-page .byline { margin-bottom: 0.2em; font-style: italic; }
+.title-page .author { font-size: 1.15em; margin-bottom: 0.8em; }
+.title-page .episode { font-style: italic; }
+.scene-heading { font-weight: bold; text-transform: uppercase; text-decoration: underline; margin-top: 1.8em; margin-bottom: 0.6em; }
+.action { margin-top: 0.7em; margin-bottom: 0.7em; }
+.character { text-align: center; text-transform: uppercase; margin-top: 0.8em; margin-bottom: 0; }
+.parenthetical { text-align: left; margin: 0 25%; font-style: italic; font-size: 0.9em; }
+.dialogue { text-align: left; margin: 0 20% 0.3em; }
+.transition { text-align: right; text-transform: uppercase; font-weight: bold; margin: 1.2em 0; }
+.act-break { text-align: center; text-transform: uppercase; font-weight: bold; font-size: 1.15em; margin: 2.5em 0 1.5em; page-break-before: always; }
+.page-marker { text-align: center; font-size: 0.7em; color: #888; margin: 1.8em 0; letter-spacing: 0.15em; }
+`;
+
+  const containerXml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles>
+<rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+</rootfiles>
+</container>`;
+
+  const contentOpf =
+`<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid" xml:lang="en">
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+<dc:identifier id="bookid">${uuid}</dc:identifier>
+<dc:title>${esc(title)}</dc:title>
+<dc:creator>${esc(author)}</dc:creator>
+<dc:language>en</dc:language>
+<meta property="dcterms:modified">${now}</meta>
+</metadata>
+<manifest>
+<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+<item id="script" href="script.xhtml" media-type="application/xhtml+xml"/>
+<item id="css" href="style.css" media-type="text/css"/>
+<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+</manifest>
+<spine toc="ncx">
+<itemref idref="script"/>
+</spine>
+</package>`;
+
+  const navXhtml =
+`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Table of Contents</title></head>
+<body>
+<nav epub:type="toc" id="toc">
+<h1>Table of Contents</h1>
+<ol><li><a href="script.xhtml">${esc(title)}</a></li></ol>
+</nav>
+</body>
+</html>`;
+
+  const tocNcx =
+`<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+<head>
+<meta name="dtb:uid" content="${uuid}"/>
+<meta name="dtb:depth" content="1"/>
+<meta name="dtb:totalPageCount" content="0"/>
+<meta name="dtb:maxPageNumber" content="0"/>
+</head>
+<docTitle><text>${esc(title)}</text></docTitle>
+<navMap>
+<navPoint id="navPoint-1" playOrder="1">
+<navLabel><text>${esc(title)}</text></navLabel>
+<content src="script.xhtml"/>
+</navPoint>
+</navMap>
+</ncx>`;
+
+  // Build the ZIP with EPUB structure
+  const zip = new JSZip();
+  // mimetype MUST be first and uncompressed
+  zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
+  zip.file('META-INF/container.xml', containerXml);
+  const oebps = zip.folder('OEBPS');
+  oebps.file('content.opf', contentOpf);
+  oebps.file('nav.xhtml', navXhtml);
+  oebps.file('toc.ncx', tocNcx);
+  oebps.file('style.css', css);
+  oebps.file('script.xhtml', chapterXhtml);
+
+  try {
+    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
+    const safeName = title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_') || 'script';
+    if (window.showSaveFilePicker) {
+      try {
+        const h = await window.showSaveFilePicker({
+          suggestedName: safeName + '.epub',
+          types: [{ description: 'EPUB', accept: { 'application/epub+zip': ['.epub'] } }]
+        });
+        const w = await h.createWritable();
+        await w.write(blob);
+        await w.close();
+        showToast('EPUB exported');
+        return;
+      } catch (err) { if (err.name === 'AbortError') return; }
+    }
+    // Fallback: anchor download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = safeName + '.epub';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    showToast('EPUB exported');
+  } catch (err) {
+    showToast('EPUB export failed: ' + err.message);
+  }
 }
 
 // ── HELPERS ────────────────────────────────────────────────────────────────
