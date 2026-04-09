@@ -1,7 +1,7 @@
 {
   "fdxFilename": "The PlayBoy EPS _01.00.4.fdx",
   "title": "THE PLAYBOY",
-  "savedAt": "2026-04-09T23:06:57.936Z",
+  "savedAt": "2026-04-09T23:10:30.431Z",
   "fontSize": 14,
   "strokeCount": 5,
   "noteCount": 2,
@@ -2719,14 +2719,14 @@
       "createdAt": "2026-04-09T22:56:46.288Z"
     },
     {
-      "id": "n-1775776006142-17n71k",
+      "id": "n-1775776209622-wrwim2",
       "anchorIdx": 1,
       "wordIdx": 1,
       "anchorWord": "SCREEN.",
       "color": "yellow",
-      "text": "ok this should update.",
+      "text": "added here this should fucking work this is the second one",
       "collapsed": true,
-      "createdAt": "2026-04-09T23:06:46.142Z"
+      "createdAt": "2026-04-09T23:10:09.622Z"
     }
   ]
 }
