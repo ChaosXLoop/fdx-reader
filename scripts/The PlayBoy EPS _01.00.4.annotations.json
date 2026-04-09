@@ -1,10 +1,10 @@
 {
   "fdxFilename": "The PlayBoy EPS _01.00.4.fdx",
   "title": "THE PLAYBOY",
-  "savedAt": "2026-04-09T22:57:30.599Z",
+  "savedAt": "2026-04-09T23:06:57.936Z",
   "fontSize": 14,
   "strokeCount": 5,
-  "noteCount": 1,
+  "noteCount": 2,
   "strokes": [
     {
       "id": "s-1775769131444-voydto",
@@ -2717,6 +2717,16 @@
       "text": "ok this is the the attempt to save over an existing annotation file.",
       "collapsed": true,
       "createdAt": "2026-04-09T22:56:46.288Z"
+    },
+    {
+      "id": "n-1775776006142-17n71k",
+      "anchorIdx": 1,
+      "wordIdx": 1,
+      "anchorWord": "SCREEN.",
+      "color": "yellow",
+      "text": "ok this should update.",
+      "collapsed": true,
+      "createdAt": "2026-04-09T23:06:46.142Z"
     }
   ]
 }
