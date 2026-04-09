@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fdx-reader-v18';
+const CACHE_NAME = 'fdx-reader-v19';
 const ASSETS = [
   './',
   './index.html',
@@ -34,6 +34,13 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   const isSameOrigin = url.origin === self.location.origin;
   const isLibraryContent = isSameOrigin && url.pathname.includes('/scripts/');
+
+  // Never touch non-GET requests (PUT/POST/DELETE to GitHub API etc.)
+  if (e.request.method !== 'GET') return;
+
+  // Never cache or intercept GitHub API calls — they must always go
+  // straight to the network so SHA lookups and writes see fresh data.
+  if (url.hostname === 'api.github.com') return;
 
   if (isLibraryContent) {
     // Network-first for library content
