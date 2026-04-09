@@ -1,3 +1,10 @@
 {
-  "scripts": []
+  "scripts": [
+    {
+      "title": "THE PLAYBOY",
+      "file": "The PlayBoy EPS _01.00.4.fdx",
+      "author": "Jonah Loop",
+      "episode": "Episode 1.00.4"
+    }
+  ]
 }
