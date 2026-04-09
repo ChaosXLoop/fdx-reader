@@ -393,6 +393,7 @@
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnTheme" title="Toggle light/dark mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg></button>
     <button class="tb-btn" id="btnGrayscale" title="Toggle grayscale for e-readers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg></button>
+    <button class="tb-btn" id="btnGithub" title="Library sync (GitHub token)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
   </div>
 
   <div class="reader-wrap" id="readerWrap">
@@ -409,10 +410,11 @@
 <!-- GitHub token modal (used when saving annotations back to the library) -->
 <div class="modal-overlay" id="tokenModal" aria-hidden="true">
   <div class="modal-box">
-    <h3>Save to library</h3>
-    <p id="tokenModalMsg">Paste a GitHub Personal Access Token with <b>Contents: write</b> permission. It will be stored in this browser only.</p>
+    <h3>Library sync</h3>
+    <p id="tokenModalMsg">Optional: if you own this repository, paste a GitHub Personal Access Token with <b>Contents: write</b> permission. It will be stored in this browser only and lets the Save button commit annotations back to the library. Leave blank to keep Save as a local download.</p>
     <input type="text" id="tokenModalInput" autocomplete="off" spellcheck="false" placeholder="ghp_... or github_pat_..."/>
     <div class="modal-actions">
+      <button class="modal-btn secondary" id="tokenModalClear" style="display:none">Remove token</button>
       <button class="modal-btn secondary" id="tokenModalCancel">Cancel</button>
       <button class="modal-btn primary" id="tokenModalOk">Save token</button>
     </div>
@@ -564,6 +566,7 @@ $('btnUndo').addEventListener('click', undoLast);
 $('btnClear').addEventListener('click', clearAll);
 $('btnSave').addEventListener('click', saveAnnotations);
 $('btnSaveAs').addEventListener('click', saveAnnotationsAsFile);
+$('btnGithub').addEventListener('click', openTokenModal);
 $('btnLoad').addEventListener('click', () => annotationFileIn.click());
 annotationFileIn.addEventListener('change', loadAnnotations);
 $('btnEpub').addEventListener('click', exportEpub);
@@ -1408,16 +1411,21 @@ function getGithubConfig() {
   return { owner, repo, branch: 'main' };
 }
 
-// Smart save: if loaded from library, commit annotations back to GitHub.
-// Otherwise fall back to downloading/file-picker.
+// Smart save:
+//  - If a GitHub token has been configured on this device AND the script
+//    was loaded from the library, commit the annotations back to GitHub.
+//  - Otherwise, fall back to the local download / file-picker flow.
+// We never auto-prompt for a token on save, so casual visitors without
+// write access never see a token dialog.
 function saveAnnotations() {
   if (!strokes.length && !notes.length) { showToast('Nothing to save'); return; }
-  if (scriptData && scriptData.sourceUrl && !/^(data:|blob:|https?:)/i.test(scriptData.sourceUrl)) {
-    // Same-origin path like "scripts/Foo.fdx" — try saving back to library
+  const hasToken = !!localStorage.getItem('githubToken');
+  const fromLibrary = scriptData && scriptData.sourceUrl &&
+    !/^(data:|blob:|https?:)/i.test(scriptData.sourceUrl);
+  if (hasToken && fromLibrary) {
     saveAnnotationsToLibrary();
     return;
   }
-  // Otherwise download/use file picker
   saveAnnotationsAsFile();
 }
 
@@ -1436,43 +1444,67 @@ function saveAnnotationsAsFile() {
   }
 }
 
-// In-app modal replacement for window.prompt() (Kindle Scribe browser
-// does not implement prompt(), so we need a custom dialog).
-function askForGithubToken(cfg) {
-  return new Promise(resolve => {
-    const modal = $('tokenModal');
-    const input = $('tokenModalInput');
-    const ok = $('tokenModalOk');
-    const cancel = $('tokenModalCancel');
-    const msg = $('tokenModalMsg');
-    msg.innerHTML = 'Paste a GitHub Personal Access Token with <b>Contents: write</b> permission on <code>' +
-      cfg.owner + '/' + cfg.repo + '</code>. It will be stored in this browser only.';
-    input.value = '';
-    modal.classList.add('visible');
-    modal.setAttribute('aria-hidden', 'false');
-    setTimeout(() => { try { input.focus(); } catch (e) {} }, 50);
+// Opens the GitHub token settings modal. Only the app owner should
+// ever run this — for everyone else, Save silently falls back to the
+// local download flow. Token is stored in localStorage per-device.
+function openTokenModal() {
+  const cfg = getGithubConfig();
+  const modal = $('tokenModal');
+  const input = $('tokenModalInput');
+  const ok = $('tokenModalOk');
+  const cancel = $('tokenModalCancel');
+  const clear = $('tokenModalClear');
+  const msg = $('tokenModalMsg');
 
-    const cleanup = (val) => {
-      modal.classList.remove('visible');
-      modal.setAttribute('aria-hidden', 'true');
-      ok.removeEventListener('click', onOk);
-      cancel.removeEventListener('click', onCancel);
-      input.removeEventListener('keydown', onKey);
-      resolve(val);
-    };
-    const onOk = () => {
-      const v = (input.value || '').trim();
-      cleanup(v || null);
-    };
-    const onCancel = () => cleanup(null);
-    const onKey = (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); onOk(); }
-      else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
-    };
-    ok.addEventListener('click', onOk);
-    cancel.addEventListener('click', onCancel);
-    input.addEventListener('keydown', onKey);
-  });
+  const existing = localStorage.getItem('githubToken') || '';
+  const repoLabel = cfg ? (cfg.owner + '/' + cfg.repo) : 'this repository';
+  msg.innerHTML =
+    'Optional: if you own <code>' + repoLabel + '</code>, paste a GitHub ' +
+    'Personal Access Token with <b>Contents: write</b> permission. It is stored ' +
+    'in this browser only (localStorage) and lets the Save button commit ' +
+    'annotations back to the library. Leave blank (or Remove) to keep Save as ' +
+    'a local download — that is the right choice for any shared device.';
+  input.value = existing;
+  input.placeholder = existing ? '(token currently set)' : 'ghp_... or github_pat_...';
+  clear.style.display = existing ? '' : 'none';
+
+  modal.classList.add('visible');
+  modal.setAttribute('aria-hidden', 'false');
+  setTimeout(() => { try { input.focus(); } catch (e) {} }, 50);
+
+  const cleanup = () => {
+    modal.classList.remove('visible');
+    modal.setAttribute('aria-hidden', 'true');
+    ok.removeEventListener('click', onOk);
+    cancel.removeEventListener('click', onCancel);
+    clear.removeEventListener('click', onClear);
+    input.removeEventListener('keydown', onKey);
+  };
+  const onOk = () => {
+    const v = (input.value || '').trim();
+    if (v) {
+      localStorage.setItem('githubToken', v);
+      showToast('Token saved — Save now commits to library');
+    } else {
+      localStorage.removeItem('githubToken');
+      showToast('Token cleared — Save will download locally');
+    }
+    cleanup();
+  };
+  const onCancel = () => cleanup();
+  const onClear = () => {
+    localStorage.removeItem('githubToken');
+    showToast('Token removed');
+    cleanup();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+    else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+  };
+  ok.addEventListener('click', onOk);
+  cancel.addEventListener('click', onCancel);
+  clear.addEventListener('click', onClear);
+  input.addEventListener('keydown', onKey);
 }
 
 async function saveAnnotationsToLibrary() {
@@ -1489,11 +1521,11 @@ async function saveAnnotationsToLibrary() {
   }
   const annPath = srcPath.replace(/\.(fdx|epub)$/i, '.annotations.json');
 
-  let token = localStorage.getItem('githubToken');
+  const token = localStorage.getItem('githubToken');
   if (!token) {
-    token = await askForGithubToken(cfg);
-    if (!token) { showToast('Save cancelled'); return; }
-    localStorage.setItem('githubToken', token);
+    showToast('No GitHub token set — using Save As');
+    saveAnnotationsAsFile();
+    return;
   }
 
   const apiBase = 'https://api.github.com/repos/' + cfg.owner + '/' + cfg.repo + '/contents/' + encodeURI(annPath);
