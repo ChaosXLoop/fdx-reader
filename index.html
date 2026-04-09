@@ -650,11 +650,50 @@ async function loadFromURL(url, displayName, annotationsUrl) {
   }
 }
 
+// Fetch a JSON file from the GitHub Contents API. Returns null if the
+// request can't be made (no config, no network) or the file is missing.
+// We go through the API (not the Pages CDN or raw.githubusercontent.com)
+// because the API always serves fresh data — important right after a
+// save, when Fastly is still caching the old version of the file.
+async function fetchJsonFromGithub(path) {
+  const cfg = getGithubConfig();
+  if (!cfg) return null;
+  const url = 'https://api.github.com/repos/' + cfg.owner + '/' + cfg.repo +
+              '/contents/' + encodeURI(path) +
+              '?ref=' + encodeURIComponent(cfg.branch) +
+              '&t=' + Date.now();
+  const headers = {
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28'
+  };
+  const token = localStorage.getItem('githubToken');
+  if (token) headers['Authorization'] = 'token ' + token;
+  try {
+    const r = await fetch(url, { headers, cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j.content) return null;
+    const bin = atob(j.content.replace(/\s/g, ''));
+    const jsonStr = decodeURIComponent(escape(bin));
+    return JSON.parse(jsonStr);
+  } catch (e) { return null; }
+}
+
 async function loadAnnotationsFromURL(url) {
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
+    // Try the GitHub API first for same-origin library paths — this
+    // defeats the Pages CDN's stale-cache window that can last several
+    // minutes after a save.
+    let data = null;
+    const sameOriginPath = !/^(data:|blob:|https?:)/i.test(url);
+    if (sameOriginPath) {
+      data = await fetchJsonFromGithub(url.replace(/^\.?\//, ''));
+    }
+    if (!data) {
+      const res = await fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      data = await res.json();
+    }
     if (data.strokes) { strokes = data.strokes; rerenderAnnotations(); }
     if (data.notes) {
       notes = data.notes;
@@ -930,20 +969,22 @@ applyGrayscale();
 btnGrayscale.addEventListener('click', () => { grayscaleOn = !grayscaleOn; applyGrayscale(); });
 
 // ── POINTER / TOUCH EVENTS (DRAW) ─────────────────────────────────────────
-const HAS_POINTER_EVENTS = 'PointerEvent' in window;
+// We register both Pointer Events and Touch Events listeners. On browsers
+// that fully support Pointer Events (iPad Safari, Chromium, Boox), pointer
+// events fire first and set lastPointerEventTime — touch handlers then
+// early-out so we don't double-process a gesture. On browsers that expose
+// the PointerEvent *class* but never actually dispatch pointer events for
+// the stylus (notably the Kindle Scribe's built-in browser), no pointer
+// event ever arrives, lastPointerEventTime stays 0, and the touch handlers
+// drive drawing directly.
+let lastPointerEventTime = 0;
+const POINTER_TOUCH_DEDUPE_MS = 500;
 
-if (HAS_POINTER_EVENTS) {
-  annotationLayer.addEventListener('pointerdown', onPointerDown);
-  annotationLayer.addEventListener('pointermove', onPointerMove);
-  annotationLayer.addEventListener('pointerup', onPointerUp);
-  annotationLayer.addEventListener('pointercancel', onPointerUp);
-}
+annotationLayer.addEventListener('pointerdown', onPointerDown);
+annotationLayer.addEventListener('pointermove', onPointerMove);
+annotationLayer.addEventListener('pointerup', onPointerUp);
+annotationLayer.addEventListener('pointercancel', onPointerUp);
 
-// Touch fallback: used on browsers without Pointer Events (e.g. Kindle
-// Scribe's built-in browser, where the stylus only produces touch events).
-// Also wired alongside pointer events as a safety net for browsers that
-// dispatch touch events in parallel — we guard with an "active" flag so
-// we don't double-process the same gesture.
 annotationLayer.addEventListener('touchstart', onTouchStart, { passive: false });
 annotationLayer.addEventListener('touchmove', onTouchMove, { passive: false });
 annotationLayer.addEventListener('touchend', onTouchEnd, { passive: false });
@@ -1008,6 +1049,7 @@ function finishDraw() {
 }
 
 function onPointerDown(e) {
+  lastPointerEventTime = Date.now();
   if (currentMode!=='draw') return;
   // Allow pen/stylus and mouse; block finger touch (so fingers can still scroll)
   if (e.pointerType==='touch') return;
@@ -1017,6 +1059,7 @@ function onPointerDown(e) {
 }
 
 function onPointerMove(e) {
+  lastPointerEventTime = Date.now();
   if (!currentStroke||!currentPath) return;
   if (e.pointerType==='touch') return;
   e.preventDefault(); e.stopPropagation();
@@ -1024,16 +1067,21 @@ function onPointerMove(e) {
 }
 
 function onPointerUp(e) {
+  lastPointerEventTime = Date.now();
   if (!currentStroke) return;
   if (e.pointerType==='touch') return;
   finishDraw();
 }
 
-// Touch handlers — drive draw/erase when Pointer Events aren't available.
-// On browsers that DO support pointer events, we skip touch processing
-// (pointer events are already handling it) to avoid double strokes.
+// Touch handlers — drive draw/erase on browsers where pointer events
+// don't actually dispatch for the stylus (Kindle Scribe). On browsers
+// where pointer events ARE working, we skip touch processing to avoid
+// double strokes (the pointer path has already run in the last ~500ms).
+function pointerEventsActive() {
+  return (Date.now() - lastPointerEventTime) < POINTER_TOUCH_DEDUPE_MS;
+}
 function onTouchStart(e) {
-  if (HAS_POINTER_EVENTS) return;
+  if (pointerEventsActive()) return;
   if (e.touches.length !== 1) return;
   if (currentMode === 'draw') {
     e.preventDefault(); e.stopPropagation();
@@ -1047,7 +1095,7 @@ function onTouchStart(e) {
 }
 
 function onTouchMove(e) {
-  if (HAS_POINTER_EVENTS) return;
+  if (pointerEventsActive()) return;
   if (e.touches.length !== 1) return;
   if (currentMode === 'draw' && currentStroke) {
     e.preventDefault(); e.stopPropagation();
@@ -1060,7 +1108,7 @@ function onTouchMove(e) {
 }
 
 function onTouchEnd(e) {
-  if (HAS_POINTER_EVENTS) return;
+  if (pointerEventsActive()) return;
   if (currentMode === 'draw') {
     finishDraw();
   } else if (currentMode === 'erase') {
@@ -1144,36 +1192,38 @@ function eraseAtPoint(x, y) {
   return changed;
 }
 
-if (HAS_POINTER_EVENTS) {
-  annotationLayer.addEventListener('pointerdown', e => {
-    if (currentMode !== 'erase') return;
-    if (e.pointerType === 'touch') return;
-    e.preventDefault(); e.stopPropagation();
-    try { annotationLayer.setPointerCapture(e.pointerId); } catch (_) {}
-    erasing = true;
-    const pos = getRelPos(e);
-    eraseAtPoint(pos.x, pos.y);
-  });
+annotationLayer.addEventListener('pointerdown', e => {
+  lastPointerEventTime = Date.now();
+  if (currentMode !== 'erase') return;
+  if (e.pointerType === 'touch') return;
+  e.preventDefault(); e.stopPropagation();
+  try { annotationLayer.setPointerCapture(e.pointerId); } catch (_) {}
+  erasing = true;
+  const pos = getRelPos(e);
+  eraseAtPoint(pos.x, pos.y);
+});
 
-  annotationLayer.addEventListener('pointermove', e => {
-    if (currentMode !== 'erase') return;
-    if (e.pointerType === 'touch') return;
-    e.preventDefault();
-    const pos = getRelPos(e);
-    if (erasing) eraseAtPoint(pos.x, pos.y);
-  });
+annotationLayer.addEventListener('pointermove', e => {
+  lastPointerEventTime = Date.now();
+  if (currentMode !== 'erase') return;
+  if (e.pointerType === 'touch') return;
+  e.preventDefault();
+  const pos = getRelPos(e);
+  if (erasing) eraseAtPoint(pos.x, pos.y);
+});
 
-  annotationLayer.addEventListener('pointerup', e => {
-    if (currentMode !== 'erase') return;
-    if (e.pointerType === 'touch') return;
-    erasing = false;
-  });
+annotationLayer.addEventListener('pointerup', e => {
+  lastPointerEventTime = Date.now();
+  if (currentMode !== 'erase') return;
+  if (e.pointerType === 'touch') return;
+  erasing = false;
+});
 
-  annotationLayer.addEventListener('pointercancel', e => {
-    if (currentMode !== 'erase') return;
-    erasing = false;
-  });
-}
+annotationLayer.addEventListener('pointercancel', e => {
+  lastPointerEventTime = Date.now();
+  if (currentMode !== 'erase') return;
+  erasing = false;
+});
 
 // ── STROKE RENDERING ──────────────────────────────────────────────────────
 function rerenderAnnotations() {
