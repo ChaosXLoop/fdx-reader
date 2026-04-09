@@ -1,10 +1,10 @@
 {
   "fdxFilename": "The PlayBoy EPS_03.00.5.fdx",
   "title": "THE PLAYBOY",
-  "savedAt": "2026-04-09T22:55:15.276Z",
+  "savedAt": "2026-04-09T22:58:41.588Z",
   "fontSize": 14,
   "strokeCount": 0,
-  "noteCount": 1,
+  "noteCount": 2,
   "strokes": [],
   "notes": [
     {
@@ -16,6 +16,16 @@
       "text": "and let's see if it will save only these notes.",
       "collapsed": true,
       "createdAt": "2026-04-09T22:54:52.562Z"
+    },
+    {
+      "id": "n-1775775493257-cvu66l",
+      "anchorIdx": 1,
+      "wordIdx": 1,
+      "anchorWord": "SCREEN.",
+      "color": "yellow",
+      "text": "this seems to have a bug where it won't save over or update an existing file.",
+      "collapsed": true,
+      "createdAt": "2026-04-09T22:58:13.257Z"
     }
   ]
 }
