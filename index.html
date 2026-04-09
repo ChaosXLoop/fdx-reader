@@ -926,11 +926,25 @@ function applyGrayscale() {
 applyGrayscale();
 btnGrayscale.addEventListener('click', () => { grayscaleOn = !grayscaleOn; applyGrayscale(); });
 
-// ── POINTER EVENTS (DRAW) ──────────────────────────────────────────────────
-annotationLayer.addEventListener('pointerdown', onPointerDown);
-annotationLayer.addEventListener('pointermove', onPointerMove);
-annotationLayer.addEventListener('pointerup', onPointerUp);
-annotationLayer.addEventListener('pointercancel', onPointerUp);
+// ── POINTER / TOUCH EVENTS (DRAW) ─────────────────────────────────────────
+const HAS_POINTER_EVENTS = 'PointerEvent' in window;
+
+if (HAS_POINTER_EVENTS) {
+  annotationLayer.addEventListener('pointerdown', onPointerDown);
+  annotationLayer.addEventListener('pointermove', onPointerMove);
+  annotationLayer.addEventListener('pointerup', onPointerUp);
+  annotationLayer.addEventListener('pointercancel', onPointerUp);
+}
+
+// Touch fallback: used on browsers without Pointer Events (e.g. Kindle
+// Scribe's built-in browser, where the stylus only produces touch events).
+// Also wired alongside pointer events as a safety net for browsers that
+// dispatch touch events in parallel — we guard with an "active" flag so
+// we don't double-process the same gesture.
+annotationLayer.addEventListener('touchstart', onTouchStart, { passive: false });
+annotationLayer.addEventListener('touchmove', onTouchMove, { passive: false });
+annotationLayer.addEventListener('touchend', onTouchEnd, { passive: false });
+annotationLayer.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
 // Prevent browser from claiming pen/stylus events as scroll/pan gestures
 // This is critical for iPad and Boox e-reader stylus support
@@ -946,13 +960,13 @@ function getRelPos(e) {
   return { x: e.clientX-r.left, y: e.clientY-r.top, pressure: e.pressure||0.5 };
 }
 
-function onPointerDown(e) {
-  if (currentMode!=='draw') return;
-  // Allow pen/stylus and mouse; block finger touch (so fingers can still scroll)
-  if (e.pointerType==='touch') return;
-  e.preventDefault(); e.stopPropagation();
-  annotationLayer.setPointerCapture(e.pointerId);
-  const pos = getRelPos(e);
+function getTouchRelPos(t) {
+  const r = reader.getBoundingClientRect();
+  return { x: t.clientX - r.left, y: t.clientY - r.top, pressure: (typeof t.force === 'number' && t.force > 0) ? t.force : 0.5 };
+}
+
+// Shared drawing primitives (called from both pointer and touch handlers)
+function startDrawAt(pos) {
   const ai = findAnchorPara(pos.y);
   const ae = textLayer.querySelector('[data-idx="'+ai+'"]');
   const at = ae ? ae.offsetTop : 0;
@@ -974,11 +988,8 @@ function onPointerDown(e) {
   annotationLayer.appendChild(currentPath);
 }
 
-function onPointerMove(e) {
-  if (!currentStroke||!currentPath) return;
-  if (e.pointerType==='touch') return;
-  e.preventDefault(); e.stopPropagation();
-  const pos = getRelPos(e);
+function extendDrawAt(pos) {
+  if (!currentStroke || !currentPath) return;
   const ae = textLayer.querySelector('[data-idx="'+currentStroke.anchorIdx+'"]');
   const at = ae ? ae.offsetTop : 0;
   const oy = at + currentStroke.anchorOffsetY;
@@ -986,12 +997,72 @@ function onPointerMove(e) {
   currentPath.setAttribute('d', currentPath.getAttribute('d')+' L '+pos.x.toFixed(1)+' '+pos.y.toFixed(1));
 }
 
-function onPointerUp(e) {
+function finishDraw() {
   if (!currentStroke) return;
-  if (e.pointerType==='touch') return;
   if (currentStroke.points.length>1) strokes.push(currentStroke);
   else if (currentPath) currentPath.remove();
   currentStroke=null; currentPath=null;
+}
+
+function onPointerDown(e) {
+  if (currentMode!=='draw') return;
+  // Allow pen/stylus and mouse; block finger touch (so fingers can still scroll)
+  if (e.pointerType==='touch') return;
+  e.preventDefault(); e.stopPropagation();
+  try { annotationLayer.setPointerCapture(e.pointerId); } catch (_) {}
+  startDrawAt(getRelPos(e));
+}
+
+function onPointerMove(e) {
+  if (!currentStroke||!currentPath) return;
+  if (e.pointerType==='touch') return;
+  e.preventDefault(); e.stopPropagation();
+  extendDrawAt(getRelPos(e));
+}
+
+function onPointerUp(e) {
+  if (!currentStroke) return;
+  if (e.pointerType==='touch') return;
+  finishDraw();
+}
+
+// Touch handlers — drive draw/erase when Pointer Events aren't available.
+// On browsers that DO support pointer events, we skip touch processing
+// (pointer events are already handling it) to avoid double strokes.
+function onTouchStart(e) {
+  if (HAS_POINTER_EVENTS) return;
+  if (e.touches.length !== 1) return;
+  if (currentMode === 'draw') {
+    e.preventDefault(); e.stopPropagation();
+    startDrawAt(getTouchRelPos(e.touches[0]));
+  } else if (currentMode === 'erase') {
+    e.preventDefault(); e.stopPropagation();
+    erasing = true;
+    const pos = getTouchRelPos(e.touches[0]);
+    eraseAtPoint(pos.x, pos.y);
+  }
+}
+
+function onTouchMove(e) {
+  if (HAS_POINTER_EVENTS) return;
+  if (e.touches.length !== 1) return;
+  if (currentMode === 'draw' && currentStroke) {
+    e.preventDefault(); e.stopPropagation();
+    extendDrawAt(getTouchRelPos(e.touches[0]));
+  } else if (currentMode === 'erase' && erasing) {
+    e.preventDefault(); e.stopPropagation();
+    const pos = getTouchRelPos(e.touches[0]);
+    eraseAtPoint(pos.x, pos.y);
+  }
+}
+
+function onTouchEnd(e) {
+  if (HAS_POINTER_EVENTS) return;
+  if (currentMode === 'draw') {
+    finishDraw();
+  } else if (currentMode === 'erase') {
+    erasing = false;
+  }
 }
 
 function findAnchorPara(y) {
@@ -1070,34 +1141,36 @@ function eraseAtPoint(x, y) {
   return changed;
 }
 
-annotationLayer.addEventListener('pointerdown', e => {
-  if (currentMode !== 'erase') return;
-  if (e.pointerType === 'touch') return;
-  e.preventDefault(); e.stopPropagation();
-  annotationLayer.setPointerCapture(e.pointerId);
-  erasing = true;
-  const pos = getRelPos(e);
-  eraseAtPoint(pos.x, pos.y);
-});
+if (HAS_POINTER_EVENTS) {
+  annotationLayer.addEventListener('pointerdown', e => {
+    if (currentMode !== 'erase') return;
+    if (e.pointerType === 'touch') return;
+    e.preventDefault(); e.stopPropagation();
+    try { annotationLayer.setPointerCapture(e.pointerId); } catch (_) {}
+    erasing = true;
+    const pos = getRelPos(e);
+    eraseAtPoint(pos.x, pos.y);
+  });
 
-annotationLayer.addEventListener('pointermove', e => {
-  if (currentMode !== 'erase') return;
-  if (e.pointerType === 'touch') return;
-  e.preventDefault();
-  const pos = getRelPos(e);
-  if (erasing) eraseAtPoint(pos.x, pos.y);
-});
+  annotationLayer.addEventListener('pointermove', e => {
+    if (currentMode !== 'erase') return;
+    if (e.pointerType === 'touch') return;
+    e.preventDefault();
+    const pos = getRelPos(e);
+    if (erasing) eraseAtPoint(pos.x, pos.y);
+  });
 
-annotationLayer.addEventListener('pointerup', e => {
-  if (currentMode !== 'erase') return;
-  if (e.pointerType === 'touch') return;
-  erasing = false;
-});
+  annotationLayer.addEventListener('pointerup', e => {
+    if (currentMode !== 'erase') return;
+    if (e.pointerType === 'touch') return;
+    erasing = false;
+  });
 
-annotationLayer.addEventListener('pointercancel', e => {
-  if (currentMode !== 'erase') return;
-  erasing = false;
-});
+  annotationLayer.addEventListener('pointercancel', e => {
+    if (currentMode !== 'erase') return;
+    erasing = false;
+  });
+}
 
 // ── STROKE RENDERING ──────────────────────────────────────────────────────
 function rerenderAnnotations() {
