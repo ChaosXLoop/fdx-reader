@@ -1,0 +1,21 @@
+{
+  "fdxFilename": "The PlayBoy EPS_03.00.5.fdx",
+  "title": "THE PLAYBOY",
+  "savedAt": "2026-04-09T22:55:15.276Z",
+  "fontSize": 14,
+  "strokeCount": 0,
+  "noteCount": 1,
+  "strokes": [],
+  "notes": [
+    {
+      "id": "n-1775775292562-4o3di7",
+      "anchorIdx": 0,
+      "wordIdx": 1,
+      "anchorWord": "OPEN",
+      "color": "yellow",
+      "text": "and let's see if it will save only these notes.",
+      "collapsed": true,
+      "createdAt": "2026-04-09T22:54:52.562Z"
+    }
+  ]
+}
