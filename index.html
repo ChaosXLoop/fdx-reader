@@ -105,6 +105,24 @@
   .drop-zone p span { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
   input[type="file"] { display: none; }
 
+  .landing-sections { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 1.5rem; }
+  .section-label { font-family: var(--mono); font-size: 0.65rem; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; }
+  .url-loader { padding: 0.75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .url-row { display: flex; gap: 0.5rem; }
+  .url-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.7rem; color: var(--text); font-family: var(--mono); font-size: 0.75rem; outline: none; }
+  .url-row input:focus { border-color: var(--accent); }
+  .url-row button { background: var(--accent); color: var(--bg); border: none; border-radius: 6px; padding: 0.5rem 1rem; font-family: var(--mono); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: opacity 0.15s; }
+  .url-row button:hover { opacity: 0.85; }
+  .library-section { padding: 0.75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .library-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 40vh; overflow-y: auto; }
+  .library-empty { color: var(--text-dim); font-size: 0.75rem; text-align: center; padding: 1rem 0; font-family: var(--mono); }
+  .library-item { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.8rem; background: var(--surface-raised); border: 1px solid transparent; border-radius: 7px; cursor: pointer; transition: all 0.15s; }
+  .library-item:hover { border-color: var(--accent); }
+  .library-item .info { flex: 1; overflow: hidden; }
+  .library-item .title { font-size: 0.85rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .library-item .meta { font-family: var(--mono); font-size: 0.65rem; color: var(--text-dim); margin-top: 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .library-item .badge { font-family: var(--mono); font-size: 0.55rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; padding: 0.2rem 0.45rem; border-radius: 4px; background: var(--accent-glow); color: var(--accent); margin-left: 0.5rem; flex-shrink: 0; }
+
   /* ── APP SHELL ────────────────────────────────────────────────────── */
   .app { display: none; flex-direction: column; height: 100vh; width: 100vw; }
   .app.active { display: flex; }
@@ -257,15 +275,33 @@
   <h1>FDX <span class="accent">Script Reader</span></h1>
   <p class="subtitle">
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
-    Open an .fdx file to start reading and marking up
+    Open an .fdx or .epub file to start reading
   </p>
-  <p class="version-label">v1.4</p>
-  <div class="drop-zone" id="dropZone">
-    <div class="icon">&#x1F4DC;</div>
-    <h2>Drop your .fdx file here</h2>
-    <p>or <span>browse to select</span></p>
+  <p class="version-label">v1.5</p>
+
+  <div class="landing-sections">
+    <div class="drop-zone" id="dropZone">
+      <div class="icon">&#x1F4DC;</div>
+      <h2>Drop your .fdx or .epub here</h2>
+      <p>or <span>browse to select</span></p>
+    </div>
+    <input type="file" id="fileInput" accept=".fdx,.epub"/>
+
+    <div class="url-loader">
+      <div class="section-label">Load from URL</div>
+      <div class="url-row">
+        <input type="text" id="urlInput" placeholder="https://example.com/script.fdx" spellcheck="false"/>
+        <button id="btnUrlLoad">Load</button>
+      </div>
+    </div>
+
+    <div class="library-section" id="librarySection">
+      <div class="section-label">Script Library</div>
+      <div class="library-list" id="libraryList">
+        <div class="library-empty">Loading\u2026</div>
+      </div>
+    </div>
   </div>
-  <input type="file" id="fileInput" accept=".fdx"/>
 </div>
 
 <!-- ── APP ─────────────────────────────────────────────────────────── -->
@@ -274,7 +310,7 @@
     <div class="toolbar-title" id="toolbarTitle"></div>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX">&#x1F4C2;</button>
-    <input type="file" id="fileInputApp" accept=".fdx" style="display:none"/>
+    <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
     <div class="tb-sep"></div>
     <span class="tb-label">Aa</span>
     <button class="tb-btn" id="btnFontDn">&#x2212;</button>
@@ -393,12 +429,61 @@ const btnDraw = $('btnDraw'), btnErase = $('btnErase'), btnNote = $('btnNote');
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) loadFDX(e.dataTransfer.files[0]); });
-fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFDX(fileInput.files[0]); });
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+// URL loader
+$('btnUrlLoad').addEventListener('click', () => {
+  const url = $('urlInput').value.trim();
+  if (!url) { showToast('Enter a URL'); return; }
+  loadFromURL(url);
+});
+$('urlInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('btnUrlLoad').click();
+});
+
+// Script library
+async function loadLibrary() {
+  const list = $('libraryList');
+  try {
+    const res = await fetch('scripts/index.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const scripts = (data && data.scripts) || [];
+    if (!scripts.length) {
+      list.innerHTML = '<div class="library-empty">No scripts in library yet. Add files to the scripts/ folder in the repo.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    for (const item of scripts) {
+      const row = document.createElement('div');
+      row.className = 'library-item';
+      const ext = (item.file || '').toLowerCase().endsWith('.epub') ? 'EPUB' : 'FDX';
+      const metaBits = [];
+      if (item.author) metaBits.push(item.author);
+      if (item.episode) metaBits.push(item.episode);
+      row.innerHTML =
+        '<div class="info">' +
+          '<div class="title"></div>' +
+          '<div class="meta"></div>' +
+        '</div>' +
+        '<div class="badge">' + ext + '</div>';
+      row.querySelector('.title').textContent = item.title || item.file;
+      row.querySelector('.meta').textContent = metaBits.join(' \u2022 ') || item.file;
+      row.addEventListener('click', () => {
+        loadFromURL('scripts/' + item.file, item.file);
+      });
+      list.appendChild(row);
+    }
+  } catch (err) {
+    list.innerHTML = '<div class="library-empty">Library unavailable (' + esc(err.message) + ')</div>';
+  }
+}
+loadLibrary();
 
 // ── TOOLBAR ────────────────────────────────────────────────────────────────
 $('btnOpen').addEventListener('click', () => fileInputApp.click());
-fileInputApp.addEventListener('change', () => { if (fileInputApp.files[0]) loadFDX(fileInputApp.files[0]); });
+fileInputApp.addEventListener('change', () => { if (fileInputApp.files[0]) loadFile(fileInputApp.files[0]); });
 $('btnFontDn').addEventListener('click', () => setFontSize(fontSize - 1));
 $('btnFontUp').addEventListener('click', () => setFontSize(fontSize + 1));
 btnDraw.addEventListener('click', () => setMode(currentMode === 'draw' ? 'read' : 'draw'));
@@ -476,28 +561,53 @@ function setMode(mode) {
 }
 
 // ── FILE LOADING ───────────────────────────────────────────────────────────
-function loadFDX(file) {
-  if (!file.name.toLowerCase().endsWith('.fdx')) { showToast('Please select a .fdx file'); return; }
-  const fr = new FileReader();
-  fr.onload = e => {
-    try {
-      scriptData = parseFDX(e.target.result, file.name);
-      computePageBreaks(scriptData.paragraphs);
-      // Show app FIRST so layout dimensions are available
-      landing.classList.add('hidden');
-      app.classList.add('active');
-      toolbarTitle.textContent = scriptData.title || file.name;
-      modeBadge.style.display = '';
-      $('pageUp').style.display = 'flex';
-      $('pageDown').style.display = 'flex';
-      // Defer render to next frame after layout
-      requestAnimationFrame(() => {
-        renderScript();
-        showToast(scriptData.paragraphs.length + ' elements loaded');
-      });
-    } catch (err) { showToast('Parse error: ' + err.message); }
-  };
-  fr.readAsText(file);
+// Dispatcher: accepts File/Blob + filename; routes by extension
+function loadFile(file, filename) {
+  const name = (filename || file.name || '').toLowerCase();
+  if (name.endsWith('.fdx')) {
+    const fr = new FileReader();
+    fr.onload = e => { try { activateScript(parseFDX(e.target.result, filename || file.name)); }
+                       catch (err) { showToast('Parse error: ' + err.message); } };
+    fr.readAsText(file);
+  } else if (name.endsWith('.epub')) {
+    file.arrayBuffer().then(buf => parseEpub(buf, filename || file.name))
+      .then(data => activateScript(data))
+      .catch(err => showToast('EPUB parse error: ' + err.message));
+  } else {
+    showToast('Please select a .fdx or .epub file');
+  }
+}
+// Backwards-compatible alias
+function loadFDX(file) { loadFile(file); }
+
+// Activate scriptData and switch to the reader view
+function activateScript(data) {
+  scriptData = data;
+  computePageBreaks(scriptData.paragraphs);
+  landing.classList.add('hidden');
+  app.classList.add('active');
+  toolbarTitle.textContent = scriptData.title || scriptData.sourceFilename || 'Script';
+  modeBadge.style.display = '';
+  $('pageUp').style.display = 'flex';
+  $('pageDown').style.display = 'flex';
+  requestAnimationFrame(() => {
+    renderScript();
+    showToast(scriptData.paragraphs.length + ' elements loaded');
+  });
+}
+
+// Load a file from a URL (same-origin or CORS-enabled)
+async function loadFromURL(url, displayName) {
+  try {
+    showToast('Fetching\u2026');
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const blob = await res.blob();
+    const name = displayName || url.split('/').pop().split('?')[0] || 'remote';
+    loadFile(blob, name);
+  } catch (err) {
+    showToast('Fetch failed: ' + err.message);
+  }
 }
 
 // ── FDX PARSER ─────────────────────────────────────────────────────────────
@@ -543,6 +653,101 @@ function parseFDX(xmlString, filename) {
     }
   }
   return { ...titleInfo, paragraphs, sourceFilename: filename };
+}
+
+// ── EPUB PARSER ────────────────────────────────────────────────────────────
+// Parses EPUBs produced by this app (and compatible formats) by mapping CSS
+// classes on <p> elements back to screenplay paragraph types.
+async function parseEpub(arrayBuffer, filename) {
+  if (typeof JSZip === 'undefined') throw new Error('EPUB library not loaded');
+  const zip = await JSZip.loadAsync(arrayBuffer);
+
+  // Find the OPF file via META-INF/container.xml
+  const containerXml = await zip.file('META-INF/container.xml').async('string');
+  const containerDoc = new DOMParser().parseFromString(containerXml, 'text/xml');
+  const rootfile = containerDoc.querySelector('rootfile');
+  if (!rootfile) throw new Error('No rootfile in container.xml');
+  const opfPath = rootfile.getAttribute('full-path');
+  const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
+
+  const opfXml = await zip.file(opfPath).async('string');
+  const opfDoc = new DOMParser().parseFromString(opfXml, 'text/xml');
+
+  // Metadata
+  const getMeta = tag => {
+    const el = opfDoc.getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', tag)[0]
+            || opfDoc.getElementsByTagName('dc:' + tag)[0];
+    return el ? (el.textContent || '').trim() : '';
+  };
+  const title = getMeta('title') || filename.replace(/\.epub$/i, '');
+  const author = getMeta('creator') || '';
+
+  // Build manifest id → href map
+  const manifest = {};
+  opfDoc.querySelectorAll('manifest item').forEach(item => {
+    manifest[item.getAttribute('id')] = item.getAttribute('href');
+  });
+
+  // Walk spine
+  const spineItems = [];
+  opfDoc.querySelectorAll('spine itemref').forEach(ref => {
+    const id = ref.getAttribute('idref');
+    if (manifest[id]) spineItems.push(manifest[id]);
+  });
+
+  const paragraphs = [];
+  let episode = '';
+  const classToType = {
+    'scene-heading': 'Scene Heading',
+    'action': 'Action',
+    'character': 'Character',
+    'parenthetical': 'Parenthetical',
+    'dialogue': 'Dialogue',
+    'transition': 'Transition',
+    'act-break': 'Transition'
+  };
+
+  for (const href of spineItems) {
+    const xhtmlPath = opfDir + href;
+    const fileEntry = zip.file(xhtmlPath);
+    if (!fileEntry) continue;
+    const xhtml = await fileEntry.async('string');
+    const doc = new DOMParser().parseFromString(xhtml, 'application/xhtml+xml');
+
+    // Pull title-page info (first spine item only)
+    if (!paragraphs.length) {
+      const h1 = doc.querySelector('.title-page h1');
+      if (h1 && !title) { /* keep existing title */ }
+      const ep = doc.querySelector('.title-page .episode');
+      if (ep) episode = (ep.textContent || '').trim();
+    }
+
+    doc.querySelectorAll('p').forEach(p => {
+      const cls = (p.getAttribute('class') || '').trim();
+      if (cls === 'page-marker' || cls === 'byline' || cls === 'author' || cls === 'episode') return;
+      const type = classToType[cls] || 'Action';
+      // Preserve <u> tags, escape the rest. Use innerHTML then sanitize.
+      let html = '';
+      let plain = '';
+      p.childNodes.forEach(n => {
+        if (n.nodeType === 3) { // text
+          html += esc(n.textContent);
+          plain += n.textContent;
+        } else if (n.nodeType === 1 && n.tagName && n.tagName.toLowerCase() === 'u') {
+          html += '<u>' + esc(n.textContent) + '</u>';
+          plain += n.textContent;
+        } else if (n.nodeType === 1) {
+          html += esc(n.textContent || '');
+          plain += n.textContent || '';
+        }
+      });
+      if (html.trim()) {
+        paragraphs.push({ type, text: html, plain, fdxPage: null });
+      }
+    });
+  }
+
+  return { title, author, episode, paragraphs, sourceFilename: filename };
 }
 
 // ── PAGE BREAKS ────────────────────────────────────────────────────────────

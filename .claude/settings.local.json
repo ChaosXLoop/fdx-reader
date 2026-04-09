@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(git remote:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(mkdir -p ~/.ssh)",
+      "Bash(chmod 700 ~/.ssh)",
+      "Bash(ssh-keyscan github.com)",
+      "Bash(~/.ssh/known_hosts)",
+      "Bash(chmod 644 ~/.ssh/known_hosts)",
+      "Bash(gh auth:*)",
+      "Bash(brew install:*)"
+    ]
+  }
+}
