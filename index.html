@@ -468,10 +468,13 @@ async function loadLibrary() {
           '<div class="meta"></div>' +
         '</div>' +
         '<div class="badge">' + ext + '</div>';
-      row.querySelector('.title').textContent = item.title || item.file;
+      const titleText = (item.title || item.file) + (item.annotations ? ' *' : '');
+      row.querySelector('.title').textContent = titleText;
+      if (item.annotations) row.querySelector('.title').title = 'Has saved annotations';
       row.querySelector('.meta').textContent = metaBits.join(' \u2022 ') || item.file;
       row.addEventListener('click', () => {
-        loadFromURL('scripts/' + item.file, item.file);
+        const annUrl = item.annotations ? 'scripts/' + item.annotations : null;
+        loadFromURL('scripts/' + item.file, item.file, annUrl);
       });
       list.appendChild(row);
     }
@@ -597,7 +600,7 @@ function activateScript(data) {
 }
 
 // Load a file from a URL (same-origin or CORS-enabled)
-async function loadFromURL(url, displayName) {
+async function loadFromURL(url, displayName, annotationsUrl) {
   try {
     showToast('Fetching\u2026');
     const res = await fetch(url);
@@ -605,8 +608,30 @@ async function loadFromURL(url, displayName) {
     const blob = await res.blob();
     const name = displayName || url.split('/').pop().split('?')[0] || 'remote';
     loadFile(blob, name);
+    if (annotationsUrl) {
+      // Delay slightly so activateScript + resizeAnnotationLayer run first
+      setTimeout(() => loadAnnotationsFromURL(annotationsUrl), 400);
+    }
   } catch (err) {
     showToast('Fetch failed: ' + err.message);
+  }
+}
+
+async function loadAnnotationsFromURL(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data.strokes) { strokes = data.strokes; rerenderAnnotations(); }
+    if (data.notes) {
+      notes = data.notes;
+      notes.forEach(n => { if (n.collapsed === undefined) n.collapsed = true; });
+      rerenderNotes();
+    }
+    resizeAnnotationLayer();
+    showToast((strokes.length||0)+' strokes + '+(notes.length||0)+' notes loaded');
+  } catch (err) {
+    showToast('Annotation load failed: ' + err.message);
   }
 }
 

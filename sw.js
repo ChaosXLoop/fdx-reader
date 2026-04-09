@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fdx-reader-v12';
+const CACHE_NAME = 'fdx-reader-v14';
 const ASSETS = [
   './',
   './index.html',
@@ -25,32 +25,18 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Fetch: cache-first for app shell, network-first for everything else
+// Fetch strategy:
+// - scripts/ folder (library content): network-first so new files/index.json
+//   updates show up without waiting for a cache bust
+// - Other same-origin (app shell): cache-first for fast offline loads
+// - External (fonts, CDNs): network-first with cache fallback
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
+  const isSameOrigin = url.origin === self.location.origin;
+  const isLibraryContent = isSameOrigin && url.pathname.includes('/scripts/');
 
-  // For same-origin requests, use cache-first
-  if (url.origin === self.location.origin) {
-    e.respondWith(
-      caches.match(e.request).then(cached => {
-        if (cached) return cached;
-        return fetch(e.request).then(response => {
-          // Cache successful responses
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
-          }
-          return response;
-        });
-      }).catch(() => {
-        // Offline fallback
-        if (e.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-      })
-    );
-  } else {
-    // External resources (fonts etc): try network, fall back to cache
+  if (isLibraryContent) {
+    // Network-first for library content
     e.respondWith(
       fetch(e.request).then(response => {
         if (response.ok) {
@@ -60,5 +46,38 @@ self.addEventListener('fetch', e => {
         return response;
       }).catch(() => caches.match(e.request))
     );
+    return;
   }
+
+  if (isSameOrigin) {
+    // Cache-first for app shell
+    e.respondWith(
+      caches.match(e.request).then(cached => {
+        if (cached) return cached;
+        return fetch(e.request).then(response => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+          }
+          return response;
+        });
+      }).catch(() => {
+        if (e.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
+      })
+    );
+    return;
+  }
+
+  // External resources: network-first with cache fallback
+  e.respondWith(
+    fetch(e.request).then(response => {
+      if (response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+      }
+      return response;
+    }).catch(() => caches.match(e.request))
+  );
 });

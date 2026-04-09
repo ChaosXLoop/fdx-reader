@@ -94,9 +94,10 @@ def main():
         except Exception as e:
             print(f'! Could not read existing index.json: {e}', file=sys.stderr)
 
-    # Scan the directory for .fdx and .epub files
+    # Scan the directory for .fdx, .epub, and annotation files
     found_files = []
-    for name in sorted(os.listdir(SCRIPTS_DIR)):
+    all_names = set(os.listdir(SCRIPTS_DIR))
+    for name in sorted(all_names):
         lower = name.lower()
         if lower.endswith('.fdx') or lower.endswith('.epub'):
             found_files.append(name)
@@ -120,14 +121,22 @@ def main():
         author = meta['author'] or prev.get('author', '')
         episode = meta['episode'] or prev.get('episode', '')
 
+        # Look for a matching annotation file (same base name + .annotations.json)
+        stem = os.path.splitext(filename)[0]
+        annotation_file = stem + '.annotations.json'
+        has_annotations = annotation_file in all_names
+
         # Build entry in stable key order
         entry = {'title': title, 'file': filename}
         if author:
             entry['author'] = author
         if episode:
             entry['episode'] = episode
+        if has_annotations:
+            entry['annotations'] = annotation_file
         new_scripts.append(entry)
-        print(f'  + {filename} -> "{title}"' + (f' by {author}' if author else ''))
+        marker = ' *' if has_annotations else ''
+        print(f'  + {filename}{marker} -> "{title}"' + (f' by {author}' if author else ''))
 
     # Write index.json if content changed
     new_data = {'scripts': new_scripts}

@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/**.fdx'
       - 'scripts/**.epub'
+      - 'scripts/**.annotations.json'
       - 'scripts/build-index.py'
       - '.github/workflows/update-library.yml'
   workflow_dispatch:
