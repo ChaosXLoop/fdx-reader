@@ -13,7 +13,8 @@
       "Bash(~/.ssh/known_hosts)",
       "Bash(chmod 644 ~/.ssh/known_hosts)",
       "Bash(gh auth:*)",
-      "Bash(brew install:*)"
+      "Bash(brew install:*)",
+      "Bash(python3 scripts/build-index.py)"
     ]
   }
 }

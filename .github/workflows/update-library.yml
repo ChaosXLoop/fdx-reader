@@ -1,0 +1,41 @@
+name: Update Script Library Index
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**.fdx'
+      - 'scripts/**.epub'
+      - 'scripts/build-index.py'
+      - '.github/workflows/update-library.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild-index:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Regenerate scripts/index.json
+        run: python scripts/build-index.py
+
+      - name: Commit and push if changed
+        run: |
+          if [[ -n "$(git status --porcelain scripts/index.json)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add scripts/index.json
+            git commit -m "Auto-update scripts/index.json"
+            git push
+          else
+            echo "No changes to scripts/index.json"
+          fi
