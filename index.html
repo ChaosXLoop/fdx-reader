@@ -292,7 +292,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx or .epub file to start reading
   </p>
-  <p class="version-label">v1.8</p>
+  <p class="version-label">v1.9</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -323,7 +323,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v1.8</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v1.9</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
@@ -1044,6 +1044,28 @@ function getTouchRelPos(t) {
   return { x: t.clientX - r.left, y: t.clientY - r.top, pressure: (typeof t.force === 'number' && t.force > 0) ? t.force : 0.5 };
 }
 
+// Build a smoothed SVG path string from an array of {x, y} points using
+// quadratic Bezier curves through the midpoints of each segment. This
+// looks much better than straight L-segments when the input device has
+// a low sample rate (e.g. the Kindle Scribe).
+function smoothPathD(pts) {
+  const n = pts.length;
+  if (n === 0) return '';
+  if (n === 1) return 'M ' + pts[0].x.toFixed(1) + ' ' + pts[0].y.toFixed(1);
+  if (n === 2) return 'M ' + pts[0].x.toFixed(1) + ' ' + pts[0].y.toFixed(1) +
+                      ' L ' + pts[1].x.toFixed(1) + ' ' + pts[1].y.toFixed(1);
+  let d = 'M ' + pts[0].x.toFixed(1) + ' ' + pts[0].y.toFixed(1);
+  for (let i = 1; i < n - 1; i++) {
+    const mx = (pts[i].x + pts[i + 1].x) / 2;
+    const my = (pts[i].y + pts[i + 1].y) / 2;
+    d += ' Q ' + pts[i].x.toFixed(1) + ' ' + pts[i].y.toFixed(1) +
+         ' ' + mx.toFixed(1) + ' ' + my.toFixed(1);
+  }
+  // Final straight segment to the last point
+  d += ' L ' + pts[n - 1].x.toFixed(1) + ' ' + pts[n - 1].y.toFixed(1);
+  return d;
+}
+
 // Shared drawing primitives (called from both pointer and touch handlers)
 function startDrawAt(pos) {
   const ai = findAnchorPara(pos.y);
@@ -1072,8 +1094,19 @@ function extendDrawAt(pos) {
   const ae = textLayer.querySelector('[data-idx="'+currentStroke.anchorIdx+'"]');
   const at = ae ? ae.offsetTop : 0;
   const oy = at + currentStroke.anchorOffsetY;
-  currentStroke.points.push({ rx: pos.x/reader.clientWidth, ry: pos.y-oy, p: pos.pressure });
-  currentPath.setAttribute('d', currentPath.getAttribute('d')+' L '+pos.x.toFixed(1)+' '+pos.y.toFixed(1));
+  const cw = reader.clientWidth;
+  // De-duplicate consecutive identical points (some browsers fire spurious
+  // moves at the same coordinates).
+  const last = currentStroke.points[currentStroke.points.length - 1];
+  const newRx = pos.x / cw;
+  const newRy = pos.y - oy;
+  if (last && Math.abs(last.rx * cw - pos.x) < 0.5 && Math.abs(last.ry - newRy) < 0.5) return;
+  currentStroke.points.push({ rx: newRx, ry: newRy, p: pos.pressure });
+  // Rebuild the path with quadratic Bezier midpoint smoothing so that
+  // sparse input samples (e.g. on the Kindle Scribe, ~2 Hz) still
+  // produce smooth-looking curves instead of polyline zig-zags.
+  const abs = currentStroke.points.map(pt => ({ x: pt.rx * cw, y: oy + pt.ry }));
+  currentPath.setAttribute('d', smoothPathD(abs));
 }
 
 function finishDraw() {
@@ -1102,7 +1135,16 @@ function onPointerMove(e) {
   lastPointerEventTime = Date.now();
   if (!currentStroke||!currentPath) return;
   e.preventDefault(); e.stopPropagation();
-  extendDrawAt(getRelPos(e));
+  // Recover sub-events that the browser batched into this single
+  // pointermove. On devices with a slow event loop (Kindle Scribe) the
+  // dispatch rate is very low but the underlying samples are still
+  // captured and exposed via getCoalescedEvents().
+  const events = (typeof e.getCoalescedEvents === 'function') ? e.getCoalescedEvents() : null;
+  if (events && events.length > 0) {
+    for (const ev of events) extendDrawAt(getRelPos(ev));
+  } else {
+    extendDrawAt(getRelPos(e));
+  }
 }
 
 function onPointerUp(e) {
@@ -1138,6 +1180,9 @@ function onTouchStart(e) {
 function onTouchMove(e) {
   if (pointerEventsActive()) return;
   if (e.touches.length !== 1) return;
+  // Recover any coalesced sub-touches if the browser exposes them.
+  const t0 = e.touches[0];
+  // Some browsers expose targetTouches with sub-events; just use the one.
   if (currentMode === 'draw' && currentStroke) {
     e.preventDefault(); e.stopPropagation();
     extendDrawAt(getTouchRelPos(e.touches[0]));
@@ -1282,8 +1327,17 @@ annotationLayer.addEventListener('pointermove', e => {
   lastPointerEventTime = Date.now();
   if (currentMode !== 'erase') return;
   e.preventDefault();
-  const pos = getRelPos(e);
-  if (erasing) eraseAtPoint(pos.x, pos.y);
+  if (!erasing) return;
+  const events = (typeof e.getCoalescedEvents === 'function') ? e.getCoalescedEvents() : null;
+  if (events && events.length > 0) {
+    for (const ev of events) {
+      const p = getRelPos(ev);
+      eraseAtPoint(p.x, p.y);
+    }
+  } else {
+    const p = getRelPos(e);
+    eraseAtPoint(p.x, p.y);
+  }
 });
 
 annotationLayer.addEventListener('pointerup', e => {
@@ -1309,11 +1363,8 @@ function rerenderAnnotations() {
     const sc = fontSize / s.referenceFontSize;
     const oy = at + s.anchorOffsetY * sc;
     if (s.points.length < 2) continue;
-    let d = '';
-    for (let i=0; i<s.points.length; i++) {
-      const pt = s.points[i];
-      d += (i===0?'M ':' L ') + (pt.rx*cw).toFixed(1)+' '+(oy+pt.ry*sc).toFixed(1);
-    }
+    const abs = s.points.map(pt => ({ x: pt.rx * cw, y: oy + pt.ry * sc }));
+    const d = smoothPathD(abs);
     const path = document.createElementNS('http://www.w3.org/2000/svg','path');
     path.setAttribute('d',d); path.setAttribute('stroke',s.color);
     path.setAttribute('stroke-width',s.width); path.setAttribute('fill','none');
