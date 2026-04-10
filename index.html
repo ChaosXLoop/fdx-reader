@@ -292,7 +292,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx or .epub file to start reading
   </p>
-  <p class="version-label">v1.7</p>
+  <p class="version-label">v1.8</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -323,7 +323,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v1.7</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v1.8</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
@@ -1087,8 +1087,12 @@ function onPointerDown(e) {
   lastPointerEventTime = Date.now();
   reportInput('pointer/' + (e.pointerType || '?'));
   if (currentMode!=='draw') return;
-  // Allow pen/stylus and mouse; block finger touch (so fingers can still scroll)
-  if (e.pointerType==='touch') return;
+  // Accept pen, mouse, AND touch pointer types. On the Kindle Scribe
+  // (and other browsers that can't distinguish stylus from finger) the
+  // stylus is reported as pointerType === 'touch'. Finger-scroll
+  // prevention while in draw/erase mode is handled separately by the
+  // readerWrap touchstart/touchmove preventDefault listeners, so any
+  // single-point input in draw mode should draw.
   e.preventDefault(); e.stopPropagation();
   try { annotationLayer.setPointerCapture(e.pointerId); } catch (_) {}
   startDrawAt(getRelPos(e));
@@ -1097,7 +1101,6 @@ function onPointerDown(e) {
 function onPointerMove(e) {
   lastPointerEventTime = Date.now();
   if (!currentStroke||!currentPath) return;
-  if (e.pointerType==='touch') return;
   e.preventDefault(); e.stopPropagation();
   extendDrawAt(getRelPos(e));
 }
@@ -1105,7 +1108,6 @@ function onPointerMove(e) {
 function onPointerUp(e) {
   lastPointerEventTime = Date.now();
   if (!currentStroke) return;
-  if (e.pointerType==='touch') return;
   finishDraw();
 }
 
@@ -1268,7 +1270,7 @@ function eraseAtPoint(x, y) {
 annotationLayer.addEventListener('pointerdown', e => {
   lastPointerEventTime = Date.now();
   if (currentMode !== 'erase') return;
-  if (e.pointerType === 'touch') return;
+  // Accept any pointer type (see onPointerDown comment).
   e.preventDefault(); e.stopPropagation();
   try { annotationLayer.setPointerCapture(e.pointerId); } catch (_) {}
   erasing = true;
@@ -1279,7 +1281,6 @@ annotationLayer.addEventListener('pointerdown', e => {
 annotationLayer.addEventListener('pointermove', e => {
   lastPointerEventTime = Date.now();
   if (currentMode !== 'erase') return;
-  if (e.pointerType === 'touch') return;
   e.preventDefault();
   const pos = getRelPos(e);
   if (erasing) eraseAtPoint(pos.x, pos.y);
@@ -1288,7 +1289,6 @@ annotationLayer.addEventListener('pointermove', e => {
 annotationLayer.addEventListener('pointerup', e => {
   lastPointerEventTime = Date.now();
   if (currentMode !== 'erase') return;
-  if (e.pointerType === 'touch') return;
   erasing = false;
 });
 
