@@ -156,6 +156,7 @@
   .annotation-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
   .annotation-layer.active { pointer-events: all; cursor: crosshair; touch-action: none; }
   .annotation-layer path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .reader.drawing, .reader.erasing-mode { touch-action: none; -webkit-user-select: none; user-select: none; }
 
   /* ── SCRIPT ELEMENTS ──────────────────────────────────────────────── */
   .sp-title-page { text-align: center; padding: 4em 0 3em; border-bottom: 1px solid var(--border); margin-bottom: 2em; }
@@ -585,6 +586,12 @@ function setMode(mode) {
   eraseControls.classList.toggle('visible', mode === 'erase');
   noteControls.classList.toggle('visible', mode === 'note');
   reader.classList.toggle('note-mode', mode === 'note');
+  // Set touch-action:none on the reader content area while drawing or
+  // erasing so the stylus can draw on touch-only browsers (Kindle Scribe)
+  // without the browser hijacking touches for scroll/zoom. Scrolling is
+  // still possible by touching the reader-wrap margins outside the text.
+  reader.classList.toggle('drawing', mode === 'draw');
+  reader.classList.toggle('erasing-mode', mode === 'erase');
 
   if (mode === 'draw' || mode === 'erase') { reader.style.userSelect = 'none'; reader.style.webkitUserSelect = 'none'; }
   else { reader.style.userSelect = ''; reader.style.webkitUserSelect = ''; }
@@ -985,10 +992,15 @@ annotationLayer.addEventListener('pointermove', onPointerMove);
 annotationLayer.addEventListener('pointerup', onPointerUp);
 annotationLayer.addEventListener('pointercancel', onPointerUp);
 
-annotationLayer.addEventListener('touchstart', onTouchStart, { passive: false });
-annotationLayer.addEventListener('touchmove', onTouchMove, { passive: false });
-annotationLayer.addEventListener('touchend', onTouchEnd, { passive: false });
-annotationLayer.addEventListener('touchcancel', onTouchEnd, { passive: false });
+// IMPORTANT: touch handlers are attached to the HTML .reader div, not to
+// the SVG annotation-layer. Some browsers (notably the Kindle Scribe's
+// built-in browser) do not deliver touch events to SVG elements reliably
+// even when pointer-events: all is set, so listening on the containing
+// HTML element is the only way to guarantee we receive them.
+reader.addEventListener('touchstart', onTouchStart, { passive: false });
+reader.addEventListener('touchmove', onTouchMove, { passive: false });
+reader.addEventListener('touchend', onTouchEnd, { passive: false });
+reader.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
 // Prevent browser from claiming pen/stylus events as scroll/pan gestures
 // This is critical for iPad and Boox e-reader stylus support
@@ -1083,11 +1095,13 @@ function pointerEventsActive() {
 function onTouchStart(e) {
   if (pointerEventsActive()) return;
   if (e.touches.length !== 1) return;
+  if (currentMode !== 'draw' && currentMode !== 'erase') return;
+  // preventDefault on the first touch of a draw/erase gesture so the
+  // browser doesn't claim the touch for scroll/zoom before we can react.
+  try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
   if (currentMode === 'draw') {
-    e.preventDefault(); e.stopPropagation();
     startDrawAt(getTouchRelPos(e.touches[0]));
   } else if (currentMode === 'erase') {
-    e.preventDefault(); e.stopPropagation();
     erasing = true;
     const pos = getTouchRelPos(e.touches[0]);
     eraseAtPoint(pos.x, pos.y);
