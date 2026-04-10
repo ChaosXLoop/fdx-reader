@@ -292,7 +292,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx or .epub file to start reading
   </p>
-  <p class="version-label">v1.6</p>
+  <p class="version-label">v1.7</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -323,6 +323,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v1.7</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
@@ -1002,6 +1003,28 @@ reader.addEventListener('touchmove', onTouchMove, { passive: false });
 reader.addEventListener('touchend', onTouchEnd, { passive: false });
 reader.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
+// Mouse-event fallback: some minimal browsers (including Kindle Scribe)
+// may only emit mouse events for stylus input. These listeners drive the
+// same drawing primitives and are deduped against pointer/touch events
+// via lastPointerEventTime.
+reader.addEventListener('mousedown', onMouseDown);
+reader.addEventListener('mousemove', onMouseMove);
+reader.addEventListener('mouseup', onMouseUp);
+reader.addEventListener('mouseleave', onMouseUp);
+
+// Diagnostic: on the very first input event received while in draw mode,
+// show a toast reporting which event type actually fired. This lets us
+// see on a device like the Kindle Scribe whether we're getting pointer,
+// touch, or mouse events. Cleared automatically after one report.
+let _inputDebugReported = false;
+function reportInput(kind) {
+  if (_inputDebugReported) return;
+  if (currentMode !== 'draw' && currentMode !== 'erase') return;
+  _inputDebugReported = true;
+  showToast('input: ' + kind);
+  setTimeout(() => { _inputDebugReported = false; }, 5000);
+}
+
 // Prevent browser from claiming pen/stylus events as scroll/pan gestures
 // This is critical for iPad and Boox e-reader stylus support
 readerWrap.addEventListener('touchstart', e => {
@@ -1062,6 +1085,7 @@ function finishDraw() {
 
 function onPointerDown(e) {
   lastPointerEventTime = Date.now();
+  reportInput('pointer/' + (e.pointerType || '?'));
   if (currentMode!=='draw') return;
   // Allow pen/stylus and mouse; block finger touch (so fingers can still scroll)
   if (e.pointerType==='touch') return;
@@ -1093,6 +1117,7 @@ function pointerEventsActive() {
   return (Date.now() - lastPointerEventTime) < POINTER_TOUCH_DEDUPE_MS;
 }
 function onTouchStart(e) {
+  reportInput('touch');
   if (pointerEventsActive()) return;
   if (e.touches.length !== 1) return;
   if (currentMode !== 'draw' && currentMode !== 'erase') return;
@@ -1128,6 +1153,40 @@ function onTouchEnd(e) {
   } else if (currentMode === 'erase') {
     erasing = false;
   }
+}
+
+// Mouse handlers — last-resort fallback. On typical desktop browsers
+// pointer events fire first (bumping lastPointerEventTime), so these
+// bail out immediately. Only kick in on browsers that emit neither
+// pointer nor touch events for stylus input.
+let _mouseDrawing = false;
+function onMouseDown(e) {
+  reportInput('mouse');
+  if (pointerEventsActive()) return;
+  if (currentMode !== 'draw' && currentMode !== 'erase') return;
+  try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
+  _mouseDrawing = true;
+  const pos = { x: e.clientX - reader.getBoundingClientRect().left,
+                y: e.clientY - reader.getBoundingClientRect().top,
+                pressure: 0.5 };
+  if (currentMode === 'draw') startDrawAt(pos);
+  else { erasing = true; eraseAtPoint(pos.x, pos.y); }
+}
+function onMouseMove(e) {
+  if (!_mouseDrawing) return;
+  if (pointerEventsActive()) { _mouseDrawing = false; return; }
+  try { e.preventDefault(); } catch (_) {}
+  const pos = { x: e.clientX - reader.getBoundingClientRect().left,
+                y: e.clientY - reader.getBoundingClientRect().top,
+                pressure: 0.5 };
+  if (currentMode === 'draw') extendDrawAt(pos);
+  else if (currentMode === 'erase') eraseAtPoint(pos.x, pos.y);
+}
+function onMouseUp(e) {
+  if (!_mouseDrawing) return;
+  _mouseDrawing = false;
+  if (currentMode === 'draw') finishDraw();
+  else if (currentMode === 'erase') erasing = false;
 }
 
 function findAnchorPara(y) {
