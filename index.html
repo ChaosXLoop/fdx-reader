@@ -270,17 +270,26 @@
   .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   /* ── MODAL ───────────────────────────────────────────────────────── */
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 500; padding: 1rem; }
-  .modal-overlay.visible { display: flex; }
-  .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; max-width: 440px; width: 100%; color: var(--text); font-family: var(--sans); }
+  /* Avoid CSS shorthand "inset" and flexbox "gap" — the Kindle Scribe
+     browser doesn't support them. Use explicit positioning instead. */
+  .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 500; padding: 1rem; visibility: hidden; opacity: 0; transition: opacity 0.15s; }
+  .modal-overlay.visible { visibility: visible; opacity: 1; }
+  .modal-box { position: relative; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; max-width: 440px; width: 100%; color: var(--text); font-family: var(--sans); }
   .modal-box h3 { margin: 0 0 0.75rem 0; font-size: 1.1rem; color: var(--text); }
   .modal-box p { font-size: 0.85rem; color: var(--text-dim); margin: 0 0 1rem 0; line-height: 1.5; }
   .modal-box input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.75rem; color: var(--text); font-family: var(--mono); font-size: 0.8rem; margin-bottom: 1rem; }
   .modal-box input:focus { outline: none; border-color: var(--accent); }
-  .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
-  .modal-btn { padding: 0.5rem 1rem; border-radius: 6px; font-family: var(--mono); font-size: 0.75rem; cursor: pointer; border: 1px solid var(--border); background: var(--surface-raised); color: var(--text); }
+  .modal-actions { display: block; text-align: right; }
+  .modal-btn { padding: 0.5rem 1rem; border-radius: 6px; font-family: var(--mono); font-size: 0.75rem; cursor: pointer; border: 1px solid var(--border); background: var(--surface-raised); color: var(--text); margin-left: 0.5rem; }
   .modal-btn.primary { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
   .modal-btn:hover { border-color: var(--border-hover); }
+
+  /* ── CONFIRM MODAL ─────────────────────────────────────────────── */
+  .confirm-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 510; padding: 1rem; visibility: hidden; opacity: 0; transition: opacity 0.15s; }
+  .confirm-overlay.visible { visibility: visible; opacity: 1; }
+  .confirm-box { position: relative; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; max-width: 340px; width: 100%; color: var(--text); font-family: var(--sans); text-align: center; }
+  .confirm-box p { font-size: 0.9rem; margin: 0 0 1.2rem; }
+  .confirm-box .modal-btn { margin: 0 0.25rem; }
 </style>
 </head>
 <body>
@@ -292,7 +301,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx or .epub file to start reading
   </p>
-  <p class="version-label">v2.1</p>
+  <p class="version-label">v2.2</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -323,7 +332,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.1</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.2</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
@@ -420,6 +429,14 @@
       <button class="modal-btn secondary" id="tokenModalCancel">Cancel</button>
       <button class="modal-btn primary" id="tokenModalOk">Save token</button>
     </div>
+  </div>
+</div>
+<!-- Confirm modal (replaces window.confirm which doesn't work on Kindle Scribe) -->
+<div class="confirm-overlay" id="confirmModal">
+  <div class="confirm-box">
+    <p id="confirmMsg">Are you sure?</p>
+    <button class="modal-btn secondary" id="confirmNo">Cancel</button>
+    <button class="modal-btn primary" id="confirmYes">OK</button>
   </div>
 </div>
 <button class="page-nav prev" id="pageUp" title="Page up">&#x25B2;</button>
@@ -1578,10 +1595,34 @@ function undoLast() {
   }
 }
 
-function clearAll() {
+// In-app replacement for window.confirm() — the Kindle Scribe browser
+// doesn't implement confirm() (always returns false immediately).
+function appConfirm(message) {
+  return new Promise(resolve => {
+    const overlay = $('confirmModal');
+    const msg = $('confirmMsg');
+    const yes = $('confirmYes');
+    const no = $('confirmNo');
+    msg.textContent = message;
+    overlay.classList.add('visible');
+    const cleanup = (result) => {
+      overlay.classList.remove('visible');
+      yes.removeEventListener('click', onYes);
+      no.removeEventListener('click', onNo);
+      resolve(result);
+    };
+    const onYes = () => cleanup(true);
+    const onNo = () => cleanup(false);
+    yes.addEventListener('click', onYes);
+    no.addEventListener('click', onNo);
+  });
+}
+
+async function clearAll() {
   const total = strokes.length + notes.length;
   if (!total) { showToast('Nothing to clear'); return; }
-  if (confirm('Clear all '+total+' annotations and notes?')) {
+  const ok = await appConfirm('Clear all ' + total + ' annotations and notes?');
+  if (ok) {
     strokes=[]; notes=[];
     rerenderAnnotations(); rerenderNotes(); resizeAnnotationLayer();
     showToast('All cleared');
