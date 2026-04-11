@@ -301,7 +301,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx or .epub file to start reading
   </p>
-  <p class="version-label">v2.2</p>
+  <p class="version-label">v2.3</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -332,7 +332,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.2</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.3</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
@@ -460,6 +460,29 @@ let currentPath = null;
 // Notes
 let notes = [];
 let noteColor = 'yellow';
+
+// ── TOKEN STORAGE ─────────────────────────────────────────────────────────
+// Three-tier persistence for the GitHub token: in-memory variable (always
+// works within a session), localStorage (if available), and a cookie
+// fallback (for browsers like the Kindle Scribe where localStorage may
+// not persist between page loads).
+let _sessionToken = null;
+function getToken() {
+  if (_sessionToken) return _sessionToken;
+  try { const t = getToken(); if (t) { _sessionToken = t; return t; } } catch (e) {}
+  try { const m = document.cookie.match(/(?:^|;\s*)ghToken=([^;]+)/); if (m) { _sessionToken = decodeURIComponent(m[1]); return _sessionToken; } } catch (e) {}
+  return null;
+}
+function setToken(token) {
+  _sessionToken = token;
+  try { localStorage.setItem('githubToken', token); } catch (e) {}
+  try { document.cookie = 'ghToken=' + encodeURIComponent(token) + ';max-age=31536000;path=/;SameSite=Strict'; } catch (e) {}
+}
+function removeToken() {
+  _sessionToken = null;
+  try { removeToken(); } catch (e) {}
+  try { document.cookie = 'ghToken=;max-age=0;path=/'; } catch (e) {}
+}
 
 // ── DOM ────────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -691,7 +714,7 @@ async function fetchJsonFromGithub(path) {
     'Accept': 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28'
   };
-  const token = localStorage.getItem('githubToken');
+  const token = getToken();
   if (token) headers['Authorization'] = 'token ' + token;
   try {
     const r = await fetch(url, { headers, cache: 'no-store' });
@@ -1672,7 +1695,7 @@ async function saveAnnotations() {
   const fromLibrary = scriptData && scriptData.sourceUrl &&
     !/^(data:|blob:|https?:)/i.test(scriptData.sourceUrl);
   if (fromLibrary) {
-    let hasToken = !!localStorage.getItem('githubToken');
+    let hasToken = !!getToken();
     if (!hasToken) {
       // Prompt for a token — the modal returns the token or null on cancel
       const token = await openTokenModal();
@@ -1716,7 +1739,7 @@ function openTokenModal() {
     const clear = $('tokenModalClear');
     const msg = $('tokenModalMsg');
 
-    const existing = localStorage.getItem('githubToken') || '';
+    const existing = getToken() || '';
     const repoLabel = cfg ? (cfg.owner + '/' + cfg.repo) : 'this repository';
     msg.innerHTML =
       'Optional: if you own <code>' + repoLabel + '</code>, paste a GitHub ' +
@@ -1744,18 +1767,18 @@ function openTokenModal() {
     const onOk = () => {
       const v = (input.value || '').trim();
       if (v) {
-        localStorage.setItem('githubToken', v);
+        setToken(v);
         showToast('Token saved — Save now commits to library');
         cleanup(v);
       } else {
-        localStorage.removeItem('githubToken');
+        removeToken();
         showToast('Token cleared — Save will download locally');
         cleanup(null);
       }
     };
     const onCancel = () => cleanup(null);
     const onClear = () => {
-      localStorage.removeItem('githubToken');
+      removeToken();
       showToast('Token removed');
       cleanup(null);
     };
@@ -1784,7 +1807,7 @@ async function saveAnnotationsToLibrary() {
   }
   const annPath = srcPath.replace(/\.(fdx|epub)$/i, '.annotations.json');
 
-  const token = localStorage.getItem('githubToken');
+  const token = getToken();
   if (!token) {
     showToast('No GitHub token set — using Save As');
     saveAnnotationsAsFile();
@@ -1842,7 +1865,7 @@ async function saveAnnotationsToLibrary() {
     try { sha = await fetchSha(); }
     catch (err) {
       if (/Auth \(401\)|Auth \(403\)/.test(err.message)) {
-        localStorage.removeItem('githubToken');
+        removeToken();
         showToast('Auth failed — token cleared, try again');
         return;
       }
@@ -1863,7 +1886,7 @@ async function saveAnnotationsToLibrary() {
     }
 
     if (res.status === 401 || res.status === 403) {
-      localStorage.removeItem('githubToken');
+      removeToken();
       showToast('Auth failed — token cleared, try again');
       return;
     }
