@@ -292,7 +292,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx or .epub file to start reading
   </p>
-  <p class="version-label">v1.9</p>
+  <p class="version-label">v2.0</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -323,7 +323,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v1.9</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.0</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
@@ -1067,16 +1067,32 @@ function smoothPathD(pts) {
 }
 
 // Shared drawing primitives (called from both pointer and touch handlers)
+//
+// Performance notes for slow-CPU devices (Kindle Scribe):
+//  - startDrawAt caches the anchor offset (_oy) and container width (_cw)
+//    so that extendDrawAt never touches the DOM (no querySelector per move).
+//  - The SVG path is built incrementally: we track the current path string
+//    (_d) and the length of the last trailing L-segment (_tailLen). Each
+//    new point strips the tail, appends a Q-curve through the midpoint,
+//    then a new L to the current position. This is O(1) per move instead
+//    of O(n) for a full smoothPathD rebuild.
 function startDrawAt(pos) {
   const ai = findAnchorPara(pos.y);
   const ae = textLayer.querySelector('[data-idx="'+ai+'"]');
   const at = ae ? ae.offsetTop : 0;
+  const cw = reader.clientWidth;
+  const initD = 'M ' + pos.x.toFixed(1) + ' ' + pos.y.toFixed(1);
   currentStroke = {
     id: 's-'+Date.now()+'-'+Math.random().toString(36).substr(2,6),
     anchorIdx: ai, anchorOffsetY: pos.y-at, referenceFontSize: fontSize,
-    containerWidth: reader.clientWidth, color: penColor, width: penWidth,
+    containerWidth: cw, color: penColor, width: penWidth,
     opacity: penOpacity,
-    points: [{rx: pos.x/reader.clientWidth, ry: 0, p: pos.pressure}]
+    points: [{rx: pos.x/cw, ry: 0, p: pos.pressure}],
+    // Cached values for incremental path building (not persisted in JSON)
+    _oy: at + (pos.y - at), // absolute y origin of this stroke
+    _cw: cw,
+    _d: initD,              // running SVG path d-attribute
+    _tailLen: 0             // length of trailing " L x y" to strip before adding Q
   };
   currentPath = document.createElementNS('http://www.w3.org/2000/svg','path');
   currentPath.setAttribute('stroke', penColor);
@@ -1085,28 +1101,44 @@ function startDrawAt(pos) {
   currentPath.setAttribute('fill','none');
   currentPath.setAttribute('stroke-linecap','round');
   currentPath.setAttribute('stroke-linejoin','round');
-  currentPath.setAttribute('d','M '+pos.x.toFixed(1)+' '+pos.y.toFixed(1));
+  currentPath.setAttribute('d', initD);
   annotationLayer.appendChild(currentPath);
 }
 
 function extendDrawAt(pos) {
   if (!currentStroke || !currentPath) return;
-  const ae = textLayer.querySelector('[data-idx="'+currentStroke.anchorIdx+'"]');
-  const at = ae ? ae.offsetTop : 0;
-  const oy = at + currentStroke.anchorOffsetY;
-  const cw = reader.clientWidth;
-  // De-duplicate consecutive identical points (some browsers fire spurious
-  // moves at the same coordinates).
-  const last = currentStroke.points[currentStroke.points.length - 1];
+  const cw = currentStroke._cw;
+  const oy = currentStroke._oy;
   const newRx = pos.x / cw;
   const newRy = pos.y - oy;
+  // De-duplicate consecutive identical points
+  const last = currentStroke.points[currentStroke.points.length - 1];
   if (last && Math.abs(last.rx * cw - pos.x) < 0.5 && Math.abs(last.ry - newRy) < 0.5) return;
   currentStroke.points.push({ rx: newRx, ry: newRy, p: pos.pressure });
-  // Rebuild the path with quadratic Bezier midpoint smoothing so that
-  // sparse input samples (e.g. on the Kindle Scribe, ~2 Hz) still
-  // produce smooth-looking curves instead of polyline zig-zags.
-  const abs = currentStroke.points.map(pt => ({ x: pt.rx * cw, y: oy + pt.ry }));
-  currentPath.setAttribute('d', smoothPathD(abs));
+  const n = currentStroke.points.length;
+  const px = pos.x.toFixed(1);
+  const py = pos.y.toFixed(1);
+  if (n === 2) {
+    // Second point — simple line; we'll replace it with a Q later
+    const tail = ' L ' + px + ' ' + py;
+    currentStroke._d += tail;
+    currentStroke._tailLen = tail.length;
+  } else {
+    // n ≥ 3: strip trailing L, add a Q through the previous point to the
+    // midpoint between previous and current, then a new L to current.
+    const d = currentStroke._d;
+    const base = currentStroke._tailLen > 0 ? d.slice(0, d.length - currentStroke._tailLen) : d;
+    const prev = currentStroke.points[n - 2];
+    const cpx = (prev.rx * cw).toFixed(1);
+    const cpy = (oy + prev.ry).toFixed(1);
+    const mx = ((prev.rx * cw + pos.x) / 2).toFixed(1);
+    const my = ((oy + prev.ry + pos.y) / 2).toFixed(1);
+    const qSeg = ' Q ' + cpx + ' ' + cpy + ' ' + mx + ' ' + my;
+    const tail = ' L ' + px + ' ' + py;
+    currentStroke._d = base + qSeg + tail;
+    currentStroke._tailLen = tail.length;
+  }
+  currentPath.setAttribute('d', currentStroke._d);
 }
 
 function finishDraw() {
