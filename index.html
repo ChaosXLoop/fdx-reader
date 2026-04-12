@@ -301,7 +301,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx or .epub file to start reading
   </p>
-  <p class="version-label">v2.3</p>
+  <p class="version-label">v2.4</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -332,7 +332,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.3</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.4</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
@@ -729,19 +729,17 @@ async function fetchJsonFromGithub(path) {
 
 async function loadAnnotationsFromURL(url) {
   try {
-    // Try the GitHub API first for same-origin library paths — this
-    // defeats the Pages CDN's stale-cache window that can last several
-    // minutes after a save.
-    let data = null;
-    const sameOriginPath = !/^(data:|blob:|https?:)/i.test(url);
-    if (sameOriginPath) {
-      data = await fetchJsonFromGithub(url.replace(/^\.?\//, ''));
-    }
-    if (!data) {
-      const res = await fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      data = await res.json();
-    }
+    // Fetch the annotation file directly from the same origin with a
+    // cache-busting query parameter. We deliberately do NOT use the
+    // GitHub Contents API here — its base64-encoded JSON response
+    // crashed the Boox e-reader browser when decoded via atob() for
+    // large annotation files. The direct fetch is fine for the initial
+    // autoload; CDN staleness (a few minutes) only matters right after
+    // a save, and in that case the data is already in memory anyway.
+    const sep = url.indexOf('?') >= 0 ? '&' : '?';
+    const res = await fetch(url + sep + 't=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
     if (data.strokes) { strokes = data.strokes; rerenderAnnotations(); }
     if (data.notes) {
       notes = data.notes;
@@ -1711,16 +1709,17 @@ async function saveAnnotations() {
 function saveAnnotationsAsFile() {
   if (!strokes.length && !notes.length) { showToast('Nothing to save'); return; }
   const { blob, defaultName } = buildAnnotationBlob();
-  if (window.showSaveFilePicker) {
-    window.showSaveFilePicker({ suggestedName: defaultName, types: [{description:'Annotations',accept:{'application/json':['.json']}}] })
-    .then(async h => { const w=await h.createWritable(); await w.write(blob); await w.close(); showToast(strokes.length+' strokes + '+notes.length+' notes saved'); })
-    .catch(err => { if(err.name!=='AbortError') showToast('Save failed'); });
-  } else {
-    const url=URL.createObjectURL(blob); const a=document.createElement('a');
-    a.href=url; a.download=defaultName; document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
-    showToast(strokes.length+' strokes + '+notes.length+' notes saved');
-  }
+  // Always use the simple <a download> approach rather than the File
+  // System Access API (showSaveFilePicker). The picker is nice on
+  // desktop Chrome but causes a stuck dialog on the Boox e-reader
+  // browser that never resolves, blocking the page until a full reload.
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = defaultName;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast(strokes.length + ' strokes + ' + notes.length + ' notes saved');
 }
 
 // Opens the GitHub token settings modal. Only the app owner should
@@ -2074,20 +2073,8 @@ body { font-family: "Courier New", Courier, monospace; font-size: 1em; line-heig
   try {
     const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
     const safeName = title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_') || 'script';
-    if (window.showSaveFilePicker) {
-      try {
-        const h = await window.showSaveFilePicker({
-          suggestedName: safeName + '.epub',
-          types: [{ description: 'EPUB', accept: { 'application/epub+zip': ['.epub'] } }]
-        });
-        const w = await h.createWritable();
-        await w.write(blob);
-        await w.close();
-        showToast('EPUB exported');
-        return;
-      } catch (err) { if (err.name === 'AbortError') return; }
-    }
-    // Fallback: anchor download
+    // Always use <a download> — showSaveFilePicker causes a stuck
+    // dialog on the Boox e-reader browser.
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = safeName + '.epub';
