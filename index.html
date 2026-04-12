@@ -158,6 +158,12 @@
   .annotation-layer path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
   .reader.drawing, .reader.erasing-mode { touch-action: none; -webkit-user-select: none; user-select: none; }
 
+  /* ── LAYER SWITCHER ───────────────────────────────────────────────── */
+  .layer-controls { display: none; align-items: center; margin-left: 8px; }
+  .layer-controls .tb-btn { margin-left: 2px; }
+  .layer-select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; font-family: var(--mono); font-size: 0.7rem; max-width: 140px; margin-left: 4px; cursor: pointer; }
+  .layer-select:focus { outline: none; border-color: var(--accent); }
+
   /* ── SCRIPT ELEMENTS ──────────────────────────────────────────────── */
   .sp-title-page { text-align: center; padding: 4em 0 3em; border-bottom: 1px solid var(--border); margin-bottom: 2em; }
   .sp-title-page .sp-title { font-size: 1.5em; font-weight: bold; text-transform: uppercase; margin-bottom: 1em; }
@@ -301,7 +307,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx or .epub file to start reading
   </p>
-  <p class="version-label">v2.4</p>
+  <p class="version-label">v2.5</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -332,7 +338,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.4</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.5</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
@@ -400,6 +406,13 @@
     <button class="tb-btn" id="btnLoad" title="Load annotations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z"/><path d="M3 9h18l-2 9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="annotationFileInput" accept=".json" style="display:none"/>
     <div class="tb-sep"></div>
+    <div class="layer-controls" id="layerControls">
+      <span class="tb-label">Layer</span>
+      <select id="layerSelect" class="layer-select"></select>
+      <button class="tb-btn" id="btnLayerVis" title="Toggle layer visibility"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      <button class="tb-btn" id="btnLayerAdd" title="Add new layer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+    <div class="tb-sep"></div>
     <button class="tb-btn" id="btnEpub" title="Export to EPUB"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h8a3 3 0 0 1 3 3v14a2 2 0 0 0-2-2H4z"/><path d="M20 4h-5a3 3 0 0 0-3 3"/><path d="M20 4v15h-6a2 2 0 0 0-2 2"/></svg></button>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnTheme" title="Toggle light/dark mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg></button>
@@ -453,13 +466,30 @@ let penColor = '#ef4444';
 let penWidth = 2;
 let penOpacity = 1.0;
 let eraserWidth = 2;
-let strokes = [];
 let currentStroke = null;
 let currentPath = null;
-
-// Notes
-let notes = [];
 let noteColor = 'yellow';
+
+// ── ANNOTATION LAYERS ─────────────────────────────────────────────────────
+// Each layer is { id, name, visible, strokes:[], notes:[], source, sourceUrl }
+let layers = [];
+let activeLayerIdx = 0;
+
+function createLayer(name, source, sourceUrl) {
+  return {
+    id: 'layer-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+    name: name || 'Annotations',
+    visible: true,
+    strokes: [],
+    notes: [],
+    source: source || 'new',   // 'library' | 'local' | 'new'
+    sourceUrl: sourceUrl || null
+  };
+}
+function activeLayer() {
+  if (!layers.length) layers.push(createLayer('Annotations', 'new', null));
+  return layers[activeLayerIdx] || layers[0];
+}
 
 // ── TOKEN STORAGE ─────────────────────────────────────────────────────────
 // Three-tier persistence for the GitHub token: in-memory variable (always
@@ -469,7 +499,7 @@ let noteColor = 'yellow';
 let _sessionToken = null;
 function getToken() {
   if (_sessionToken) return _sessionToken;
-  try { const t = getToken(); if (t) { _sessionToken = t; return t; } } catch (e) {}
+  try { const t = localStorage.getItem('githubToken'); if (t) { _sessionToken = t; return t; } } catch (e) {}
   try { const m = document.cookie.match(/(?:^|;\s*)ghToken=([^;]+)/); if (m) { _sessionToken = decodeURIComponent(m[1]); return _sessionToken; } } catch (e) {}
   return null;
 }
@@ -674,6 +704,7 @@ function activateScript(data, sourceUrl) {
   modeBadge.style.display = '';
   $('pageUp').style.display = 'flex';
   $('pageDown').style.display = 'flex';
+  $('layerControls').style.display = 'flex';
   requestAnimationFrame(() => {
     renderScript();
     showToast(scriptData.paragraphs.length + ' elements loaded');
@@ -740,14 +771,29 @@ async function loadAnnotationsFromURL(url) {
     const res = await fetch(url + sep + 't=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    if (data.strokes) { strokes = data.strokes; rerenderAnnotations(); }
-    if (data.notes) {
-      notes = data.notes;
-      notes.forEach(n => { if (n.collapsed === undefined) n.collapsed = true; });
-      rerenderNotes();
+    // Create a new layer (or populate the first empty default layer)
+    let layer;
+    const defaultLayer = layers.length === 1 && !layers[0].strokes.length && !layers[0].notes.length ? layers[0] : null;
+    if (defaultLayer) {
+      layer = defaultLayer;
+      layer.name = 'Library';
+      layer.source = 'library';
+      layer.sourceUrl = url;
+    } else {
+      layer = createLayer('Library', 'library', url);
+      layers.push(layer);
+      activeLayerIdx = layers.length - 1;
     }
+    if (data.strokes) layer.strokes = data.strokes;
+    if (data.notes) {
+      layer.notes = data.notes;
+      layer.notes.forEach(n => { if (n.collapsed === undefined) n.collapsed = true; });
+    }
+    rerenderAnnotations();
+    rerenderNotes();
     resizeAnnotationLayer();
-    showToast((strokes.length||0)+' strokes + '+(notes.length||0)+' notes loaded');
+    updateLayerUI();
+    showToast((layer.strokes.length||0)+' strokes + '+(layer.notes.length||0)+' notes loaded');
   } catch (err) {
     showToast('Annotation load failed: ' + err.message);
   }
@@ -956,10 +1002,59 @@ function renderScript() {
   });
 
   textLayer.innerHTML = html;
-  strokes = []; notes = [];
+  layers = [createLayer('Annotations', 'new', null)];
+  activeLayerIdx = 0;
   rerenderAnnotations();
   resizeAnnotationLayer();
+  updateLayerUI();
 }
+
+// ── LAYER UI ──────────────────────────────────────────────────────────────
+function updateLayerUI() {
+  const sel = $('layerSelect');
+  if (!sel) return;
+  sel.innerHTML = '';
+  layers.forEach((l, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = l.name + (l.visible ? '' : ' (hidden)');
+    if (i === activeLayerIdx) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  // Update eye icon state
+  const btn = $('btnLayerVis');
+  if (btn) {
+    const vis = layers[activeLayerIdx] && layers[activeLayerIdx].visible;
+    btn.style.opacity = vis ? '1' : '0.4';
+  }
+}
+
+// Layer select change
+$('layerSelect').addEventListener('change', function() {
+  activeLayerIdx = parseInt(this.value, 10) || 0;
+  updateLayerUI();
+});
+
+// Toggle active layer visibility
+$('btnLayerVis').addEventListener('click', function() {
+  const layer = layers[activeLayerIdx];
+  if (!layer) return;
+  layer.visible = !layer.visible;
+  rerenderAnnotations();
+  rerenderNotes();
+  updateLayerUI();
+});
+
+// Add new empty layer
+$('btnLayerAdd').addEventListener('click', function() {
+  const layer = createLayer('Layer ' + (layers.length + 1), 'new', null);
+  layers.push(layer);
+  activeLayerIdx = layers.length - 1;
+  rerenderAnnotations();
+  rerenderNotes();
+  updateLayerUI();
+  showToast('New layer: ' + layer.name);
+});
 
 // ── FONT SIZE ──────────────────────────────────────────────────────────────
 function setFontSize(size) {
@@ -1049,19 +1144,6 @@ reader.addEventListener('mousedown', onMouseDown);
 reader.addEventListener('mousemove', onMouseMove);
 reader.addEventListener('mouseup', onMouseUp);
 reader.addEventListener('mouseleave', onMouseUp);
-
-// Diagnostic: on the very first input event received while in draw mode,
-// show a toast reporting which event type actually fired. This lets us
-// see on a device like the Kindle Scribe whether we're getting pointer,
-// touch, or mouse events. Cleared automatically after one report.
-let _inputDebugReported = false;
-function reportInput(kind) {
-  if (_inputDebugReported) return;
-  if (currentMode !== 'draw' && currentMode !== 'erase') return;
-  _inputDebugReported = true;
-  showToast('input: ' + kind);
-  setTimeout(() => { _inputDebugReported = false; }, 5000);
-}
 
 // Prevent browser from claiming pen/stylus events as scroll/pan gestures
 // This is critical for iPad and Boox e-reader stylus support
@@ -1181,14 +1263,13 @@ function extendDrawAt(pos) {
 
 function finishDraw() {
   if (!currentStroke) return;
-  if (currentStroke.points.length>1) strokes.push(currentStroke);
+  if (currentStroke.points.length>1) activeLayer().strokes.push(currentStroke);
   else if (currentPath) currentPath.remove();
   currentStroke=null; currentPath=null;
 }
 
 function onPointerDown(e) {
   lastPointerEventTime = Date.now();
-  reportInput('pointer/' + (e.pointerType || '?'));
   if (currentMode!=='draw') return;
   // Accept pen, mouse, AND touch pointer types. On the Kindle Scribe
   // (and other browsers that can't distinguish stylus from finger) the
@@ -1231,7 +1312,6 @@ function pointerEventsActive() {
   return (Date.now() - lastPointerEventTime) < POINTER_TOUCH_DEDUPE_MS;
 }
 function onTouchStart(e) {
-  reportInput('touch');
   if (pointerEventsActive()) return;
   if (e.touches.length !== 1) return;
   if (currentMode !== 'draw' && currentMode !== 'erase') return;
@@ -1278,7 +1358,6 @@ function onTouchEnd(e) {
 // pointer nor touch events for stylus input.
 let _mouseDrawing = false;
 function onMouseDown(e) {
-  reportInput('mouse');
   if (pointerEventsActive()) return;
   if (currentMode !== 'draw' && currentMode !== 'erase') return;
   try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
@@ -1337,7 +1416,7 @@ function eraseAtPoint(x, y) {
   let changed = false;
   const newStrokes = [];
 
-  for (const s of strokes) {
+  for (const s of activeLayer().strokes) {
     const resolved = resolveStrokePoints(s);
     // Mark which points are hit by the eraser
     const keep = resolved.map(p => {
@@ -1378,7 +1457,7 @@ function eraseAtPoint(x, y) {
     }
   }
 
-  if (changed) { strokes = newStrokes; rerenderAnnotations(); }
+  if (changed) { activeLayer().strokes = newStrokes; rerenderAnnotations(); }
   return changed;
 }
 
@@ -1427,20 +1506,23 @@ function rerenderAnnotations() {
   annotationLayer.querySelectorAll('path').forEach(p => { if (p!==currentPath) p.remove(); });
   const cw = reader.clientWidth;
   if (!cw) return;
-  for (const s of strokes) {
-    const ae = textLayer.querySelector('[data-idx="'+s.anchorIdx+'"]');
-    const at = ae ? ae.offsetTop : 0;
-    const sc = fontSize / s.referenceFontSize;
-    const oy = at + s.anchorOffsetY * sc;
-    if (s.points.length < 2) continue;
-    const abs = s.points.map(pt => ({ x: pt.rx * cw, y: oy + pt.ry * sc }));
-    const d = smoothPathD(abs);
-    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
-    path.setAttribute('d',d); path.setAttribute('stroke',s.color);
-    path.setAttribute('stroke-width',s.width); path.setAttribute('fill','none');
-    path.setAttribute('stroke-opacity', s.opacity !== undefined ? s.opacity : 1);
-    path.setAttribute('stroke-linecap','round'); path.setAttribute('stroke-linejoin','round');
-    annotationLayer.appendChild(path);
+  for (const layer of layers) {
+    if (!layer.visible) continue;
+    for (const s of layer.strokes) {
+      const ae = textLayer.querySelector('[data-idx="'+s.anchorIdx+'"]');
+      const at = ae ? ae.offsetTop : 0;
+      const sc = fontSize / s.referenceFontSize;
+      const oy = at + s.anchorOffsetY * sc;
+      if (s.points.length < 2) continue;
+      const abs = s.points.map(pt => ({ x: pt.rx * cw, y: oy + pt.ry * sc }));
+      const d = smoothPathD(abs);
+      const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d',d); path.setAttribute('stroke',s.color);
+      path.setAttribute('stroke-width',s.width); path.setAttribute('fill','none');
+      path.setAttribute('stroke-opacity', s.opacity !== undefined ? s.opacity : 1);
+      path.setAttribute('stroke-linecap','round'); path.setAttribute('stroke-linejoin','round');
+      annotationLayer.appendChild(path);
+    }
   }
 }
 
@@ -1452,7 +1534,9 @@ textLayer.addEventListener('click', e => {
   const indicator = e.target.closest('.note-indicator');
   if (indicator) {
     const noteId = indicator.dataset.noteId;
-    const note = notes.find(n => n.id === noteId);
+    // Search all layers for the clicked note
+    let note = null;
+    for (const l of layers) { note = l.notes.find(n => n.id === noteId); if (note) break; }
     if (note) { note.collapsed = false; rerenderNotes(); }
     return;
   }
@@ -1477,7 +1561,7 @@ textLayer.addEventListener('click', e => {
     collapsed: false,
     createdAt: new Date().toISOString()
   };
-  notes.push(note);
+  activeLayer().notes.push(note);
   rerenderNotes();
 
   // Focus the new note's textarea
@@ -1499,89 +1583,93 @@ function rerenderNotes() {
     w.className = 'w'; // reset highlight classes
   });
 
-  for (const note of notes) {
-    // Highlight the anchored word
-    const wordEl = textLayer.querySelector('.w[data-p="'+note.anchorIdx+'"][data-w="'+note.wordIdx+'"]');
-    if (wordEl) {
-      wordEl.classList.add('noted-' + note.color);
-    }
-
-    if (note.collapsed) {
-      // Insert small indicator dot after the word
+  for (const layer of layers) {
+    if (!layer.visible) continue;
+    for (const note of layer.notes) {
+      // Highlight the anchored word
+      const wordEl = textLayer.querySelector('.w[data-p="'+note.anchorIdx+'"][data-w="'+note.wordIdx+'"]');
       if (wordEl) {
-        const dot = document.createElement('span');
-        dot.className = 'note-indicator ind-'+note.color;
-        dot.dataset.noteId = note.id;
-        dot.title = note.text ? note.text.substring(0, 60) : 'Empty note';
-        wordEl.after(dot);
+        wordEl.classList.add('noted-' + note.color);
       }
-    } else {
-      // Expanded card — insert after the paragraph
-      const paraEl = textLayer.querySelector('[data-idx="'+note.anchorIdx+'"]');
-      if (!paraEl) continue;
 
-      const card = document.createElement('div');
-      card.className = 'sticky-note note-'+note.color;
-      card.dataset.noteId = note.id;
-
-      const hasText = !!note.text;
-
-      card.innerHTML =
-        '<div class="sticky-note-header">' +
-          '<span class="sticky-note-label">Note</span>' +
-          '<span class="sticky-note-anchor-preview">\u201C'+esc(note.anchorWord)+'\u201D</span>' +
-          '<div class="sticky-note-actions">' +
-            '<button class="note-min-btn" title="Minimize">\u2013</button>' +
-            '<button class="note-edit-btn" title="Edit">\u270E</button>' +
-            '<button class="note-del-btn" title="Delete">\u2715</button>' +
-          '</div>' +
-        '</div>' +
-        (hasText
-          ? '<div class="note-text">'+esc(note.text)+'</div>'
-          : '<textarea placeholder="Type your note\u2026"></textarea>');
-
-      // Find insertion point: after the paragraph, but after any existing cards for this paragraph
-      let insertAfter = paraEl;
-      let next = paraEl.nextElementSibling;
-      while (next && next.classList.contains('sticky-note')) {
-        insertAfter = next;
-        next = next.nextElementSibling;
-      }
-      insertAfter.after(card);
-
-      // Wire events
-      card.querySelector('.note-del-btn').addEventListener('click', () => {
-        notes = notes.filter(n => n.id !== note.id);
-        rerenderNotes();
-        resizeAnnotationLayer();
-        showToast('Note deleted');
-      });
-
-      card.querySelector('.note-min-btn').addEventListener('click', () => {
-        if (!note.text) {
-          // Can't minimize an empty note — delete it instead
-          notes = notes.filter(n => n.id !== note.id);
-          showToast('Empty note removed');
-        } else {
-          note.collapsed = true;
+      if (note.collapsed) {
+        // Insert small indicator dot after the word
+        if (wordEl) {
+          const dot = document.createElement('span');
+          dot.className = 'note-indicator ind-'+note.color;
+          dot.dataset.noteId = note.id;
+          dot.title = note.text ? note.text.substring(0, 60) : 'Empty note';
+          wordEl.after(dot);
         }
-        rerenderNotes();
-        resizeAnnotationLayer();
-      });
+      } else {
+        // Expanded card — insert after the paragraph
+        const paraEl = textLayer.querySelector('[data-idx="'+note.anchorIdx+'"]');
+        if (!paraEl) continue;
 
-      card.querySelector('.note-edit-btn').addEventListener('click', () => {
-        const textDiv = card.querySelector('.note-text');
-        if (!textDiv) return;
-        const ta = document.createElement('textarea');
-        ta.value = note.text;
-        textDiv.replaceWith(ta);
-        ta.focus();
-        wireTextarea(ta, note);
-      });
+        const card = document.createElement('div');
+        card.className = 'sticky-note note-'+note.color;
+        card.dataset.noteId = note.id;
 
-      // Wire textarea for new notes
-      const ta = card.querySelector('textarea');
-      if (ta && !hasText) wireTextarea(ta, note);
+        const hasText = !!note.text;
+
+        card.innerHTML =
+          '<div class="sticky-note-header">' +
+            '<span class="sticky-note-label">Note</span>' +
+            '<span class="sticky-note-anchor-preview">\u201C'+esc(note.anchorWord)+'\u201D</span>' +
+            '<div class="sticky-note-actions">' +
+              '<button class="note-min-btn" title="Minimize">\u2013</button>' +
+              '<button class="note-edit-btn" title="Edit">\u270E</button>' +
+              '<button class="note-del-btn" title="Delete">\u2715</button>' +
+            '</div>' +
+          '</div>' +
+          (hasText
+            ? '<div class="note-text">'+esc(note.text)+'</div>'
+            : '<textarea placeholder="Type your note\u2026"></textarea>');
+
+        // Find insertion point: after the paragraph, but after any existing cards for this paragraph
+        let insertAfter = paraEl;
+        let next = paraEl.nextElementSibling;
+        while (next && next.classList.contains('sticky-note')) {
+          insertAfter = next;
+          next = next.nextElementSibling;
+        }
+        insertAfter.after(card);
+
+        // Wire events — capture `layer` in closure so delete/edit
+        // operate on the correct layer's notes array.
+        const noteLayer = layer;
+        card.querySelector('.note-del-btn').addEventListener('click', () => {
+          noteLayer.notes = noteLayer.notes.filter(n => n.id !== note.id);
+          rerenderNotes();
+          resizeAnnotationLayer();
+          showToast('Note deleted');
+        });
+
+        card.querySelector('.note-min-btn').addEventListener('click', () => {
+          if (!note.text) {
+            noteLayer.notes = noteLayer.notes.filter(n => n.id !== note.id);
+            showToast('Empty note removed');
+          } else {
+            note.collapsed = true;
+          }
+          rerenderNotes();
+          resizeAnnotationLayer();
+        });
+
+        card.querySelector('.note-edit-btn').addEventListener('click', () => {
+          const textDiv = card.querySelector('.note-text');
+          if (!textDiv) return;
+          const ta = document.createElement('textarea');
+          ta.value = note.text;
+          textDiv.replaceWith(ta);
+          ta.focus();
+          wireTextarea(ta, note);
+        });
+
+        // Wire textarea for new notes
+        const ta = card.querySelector('textarea');
+        if (ta && !hasText) wireTextarea(ta, note);
+      }
     }
   }
 
@@ -1593,8 +1681,11 @@ function wireTextarea(ta, note) {
   ta.addEventListener('blur', () => {
     note.text = ta.value.trim();
     if (!note.text) {
-      // Empty — remove
-      notes = notes.filter(n => n.id !== note.id);
+      // Empty — remove from whichever layer owns it
+      for (const l of layers) {
+        const idx = l.notes.findIndex(n => n.id === note.id);
+        if (idx >= 0) { l.notes.splice(idx, 1); break; }
+      }
     }
     rerenderNotes();
     resizeAnnotationLayer();
@@ -1607,12 +1698,13 @@ function wireTextarea(ta, note) {
 
 // ── UNDO / CLEAR ───────────────────────────────────────────────────────────
 function undoLast() {
+  const al = activeLayer();
   if (currentMode === 'draw') {
-    if (!strokes.length) { showToast('Nothing to undo'); return; }
-    strokes.pop(); rerenderAnnotations(); showToast('Stroke undone');
+    if (!al.strokes.length) { showToast('Nothing to undo'); return; }
+    al.strokes.pop(); rerenderAnnotations(); showToast('Stroke undone');
   } else {
-    if (!notes.length) { showToast('Nothing to undo'); return; }
-    notes.pop(); rerenderNotes(); resizeAnnotationLayer(); showToast('Note undone');
+    if (!al.notes.length) { showToast('Nothing to undo'); return; }
+    al.notes.pop(); rerenderNotes(); resizeAnnotationLayer(); showToast('Note undone');
   }
 }
 
@@ -1640,13 +1732,14 @@ function appConfirm(message) {
 }
 
 async function clearAll() {
-  const total = strokes.length + notes.length;
+  const al = activeLayer();
+  const total = al.strokes.length + al.notes.length;
   if (!total) { showToast('Nothing to clear'); return; }
-  const ok = await appConfirm('Clear all ' + total + ' annotations and notes?');
+  const ok = await appConfirm('Clear all ' + total + ' items on layer "' + al.name + '"?');
   if (ok) {
-    strokes=[]; notes=[];
+    al.strokes = []; al.notes = [];
     rerenderAnnotations(); rerenderNotes(); resizeAnnotationLayer();
-    showToast('All cleared');
+    showToast('Layer cleared');
   }
 }
 
@@ -1656,8 +1749,8 @@ function buildAnnotationBlob() {
     fdxFilename: scriptData ? scriptData.sourceFilename : 'unknown.fdx',
     title: scriptData ? scriptData.title : '',
     savedAt: new Date().toISOString(),
-    fontSize, strokeCount: strokes.length, noteCount: notes.length,
-    strokes, notes
+    fontSize, strokeCount: activeLayer().strokes.length, noteCount: activeLayer().notes.length,
+    strokes: activeLayer().strokes, notes: activeLayer().notes
   };
   return {
     json: JSON.stringify(data, null, 2),
@@ -1689,9 +1782,14 @@ function getGithubConfig() {
 // rejected by the browser ("invalid file type"). Library-loaded scripts
 // always save to GitHub; the token modal only appears once per device.
 async function saveAnnotations() {
-  if (!strokes.length && !notes.length) { showToast('Nothing to save'); return; }
-  const fromLibrary = scriptData && scriptData.sourceUrl &&
-    !/^(data:|blob:|https?:)/i.test(scriptData.sourceUrl);
+  const al = activeLayer();
+  if (!al.strokes.length && !al.notes.length) { showToast('Nothing to save'); return; }
+  // If this layer was loaded from the library, or the script itself was,
+  // try the GitHub save path.
+  const layerUrl = al.sourceUrl;
+  const scriptUrl = scriptData && scriptData.sourceUrl;
+  const fromLibrary = (layerUrl || scriptUrl) &&
+    !/^(data:|blob:|https?:)/i.test(layerUrl || scriptUrl);
   if (fromLibrary) {
     let hasToken = !!getToken();
     if (!hasToken) {
@@ -1707,7 +1805,8 @@ async function saveAnnotations() {
 }
 
 function saveAnnotationsAsFile() {
-  if (!strokes.length && !notes.length) { showToast('Nothing to save'); return; }
+  const al = activeLayer();
+  if (!al.strokes.length && !al.notes.length) { showToast('Nothing to save'); return; }
   const { blob, defaultName } = buildAnnotationBlob();
   // Always use the simple <a download> approach rather than the File
   // System Access API (showSaveFilePicker). The picker is nice on
@@ -1719,7 +1818,7 @@ function saveAnnotationsAsFile() {
   document.body.appendChild(a); a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  showToast(strokes.length + ' strokes + ' + notes.length + ' notes saved');
+  showToast(activeLayer().strokes.length + ' strokes + ' + activeLayer().notes.length + ' notes saved');
 }
 
 // Opens the GitHub token settings modal. Only the app owner should
@@ -1799,12 +1898,20 @@ async function saveAnnotationsToLibrary() {
     saveAnnotationsAsFile();
     return;
   }
-  const srcPath = scriptData.sourceUrl.replace(/^\.?\//, '');
-  if (!/\.(fdx|epub)$/i.test(srcPath)) {
-    showToast('Unsupported source path');
-    return;
+  // If the layer itself has a sourceUrl (loaded from library), use that
+  // for the annotation path. Otherwise derive from the script's source URL.
+  const al = activeLayer();
+  let annPath;
+  if (al.sourceUrl) {
+    annPath = al.sourceUrl.replace(/^\.?\//, '');
+  } else {
+    const srcPath = (scriptData.sourceUrl || '').replace(/^\.?\//, '');
+    if (!/\.(fdx|epub)$/i.test(srcPath)) {
+      showToast('Unsupported source path');
+      return;
+    }
+    annPath = srcPath.replace(/\.(fdx|epub)$/i, '.annotations.json');
   }
-  const annPath = srcPath.replace(/\.(fdx|epub)$/i, '.annotations.json');
 
   const token = getToken();
   if (!token) {
@@ -1898,7 +2005,7 @@ async function saveAnnotationsToLibrary() {
       } catch (_) { msg += ' ' + t.slice(0, 140); }
       throw new Error(msg);
     }
-    showToast('Saved to library: ' + strokes.length + ' strokes, ' + notes.length + ' notes');
+    showToast('Saved to library: ' + activeLayer().strokes.length + ' strokes, ' + activeLayer().notes.length + ' notes');
   } catch (err) {
     showToast('Library save failed: ' + err.message);
   }
@@ -1910,15 +2017,21 @@ function loadAnnotations() {
   fr.onload = e => {
     try {
       const data = JSON.parse(e.target.result);
-      if (data.strokes) { strokes = data.strokes; rerenderAnnotations(); }
+      // Create a new layer for the loaded annotations
+      const layerName = file.name.replace(/\.annotations\.json$/i, '').replace(/\.json$/i, '') || 'Loaded';
+      const layer = createLayer(layerName, 'local', null);
+      if (data.strokes) layer.strokes = data.strokes;
       if (data.notes) {
-        notes = data.notes;
-        // Default collapsed=true for loaded notes
-        notes.forEach(n => { if (n.collapsed === undefined) n.collapsed = true; });
-        rerenderNotes();
+        layer.notes = data.notes;
+        layer.notes.forEach(n => { if (n.collapsed === undefined) n.collapsed = true; });
       }
+      layers.push(layer);
+      activeLayerIdx = layers.length - 1;
+      rerenderAnnotations();
+      rerenderNotes();
       resizeAnnotationLayer();
-      showToast((strokes.length||0)+' strokes + '+(notes.length||0)+' notes loaded');
+      updateLayerUI();
+      showToast((layer.strokes.length||0)+' strokes + '+(layer.notes.length||0)+' notes loaded as "'+layerName+'"');
     } catch(err) { showToast('Failed: '+err.message); }
   };
   fr.readAsText(file); annotationFileIn.value='';
