@@ -77,13 +77,22 @@
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
+    /* overflow is managed per-view: landing scrolls freely, reader locks it */
+  }
+  body.reader-active {
     overflow: hidden;
   }
 
   /* ── LANDING ──────────────────────────────────────────────────────── */
   .landing {
     display: flex; flex-direction: column; align-items: center;
-    justify-content: center; min-height: 100vh; padding: 2rem;
+    justify-content: flex-start; min-height: 100vh;
+    padding: 3rem 2rem 3rem; /* top room + bottom breathing space */
+    overflow-y: auto;
+  }
+  /* On taller screens, center vertically; on small screens, scroll naturally */
+  @media (min-height: 700px) {
+    .landing { justify-content: center; }
   }
   .landing.hidden { display: none; }
   .landing h1 { font-family: var(--mono); font-size: 1.6rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 0.4rem; }
@@ -114,7 +123,8 @@
   .url-row button { background: var(--accent); color: var(--bg); border: none; border-radius: 6px; padding: 0.5rem 1rem; font-family: var(--mono); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: opacity 0.15s; }
   .url-row button:hover { opacity: 0.85; }
   .library-section { padding: 0.75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
-  .library-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 40vh; overflow-y: auto; }
+  .library-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 30vh; overflow-y: auto; }
+  @media (min-height: 700px) { .library-list { max-height: 40vh; } }
   .library-empty { color: var(--text-dim); font-size: 0.75rem; text-align: center; padding: 1rem 0; font-family: var(--mono); }
   .library-item { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.8rem; background: var(--surface-raised); border: 1px solid transparent; border-radius: 7px; cursor: pointer; transition: all 0.15s; }
   .library-item:hover { border-color: var(--accent); }
@@ -700,6 +710,7 @@ function activateScript(data, sourceUrl) {
   computePageBreaks(scriptData.paragraphs);
   landing.classList.add('hidden');
   app.classList.add('active');
+  document.body.classList.add('reader-active');
   toolbarTitle.textContent = scriptData.title || scriptData.sourceFilename || 'Script';
   modeBadge.style.display = '';
   $('pageUp').style.display = 'flex';
