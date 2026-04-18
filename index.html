@@ -134,8 +134,9 @@
   .library-item .badge { font-family: var(--mono); font-size: 0.55rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; padding: 0.2rem 0.45rem; border-radius: 4px; background: var(--accent-glow); color: var(--accent); margin-left: 0.5rem; flex-shrink: 0; }
 
   /* ── APP SHELL ────────────────────────────────────────────────────── */
-  .app { display: none; flex-direction: column; height: 100vh; width: 100vw; }
-  .app.active { display: flex; }
+  .app { display: none; flex-direction: column; }
+  /* Fixed to the viewport — immune to any body scroll offset on the landing */
+  .app.active { display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
 
   /* ── TOOLBAR ──────────────────────────────────────────────────────── */
   .toolbar {
@@ -338,7 +339,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx or .epub file to start reading
   </p>
-  <p class="version-label">v2.9</p>
+  <p class="version-label">v2.10</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -369,7 +370,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.9</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.10</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
@@ -732,6 +733,7 @@ function activateScript(data, sourceUrl) {
   landing.classList.add('hidden');
   app.classList.add('active');
   document.body.classList.add('reader-active');
+  window.scrollTo(0, 0); // reset any scroll offset from landing page
   toolbarTitle.textContent = scriptData.title || scriptData.sourceFilename || 'Script';
   modeBadge.style.display = '';
   $('pageUp').style.display = 'flex';
