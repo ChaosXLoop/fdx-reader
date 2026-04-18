@@ -143,16 +143,21 @@
     padding: 0.4rem 0.75rem;
     background: var(--surface); border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    /* Single scrollable row — never wraps, no matter screen width */
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none; /* Firefox */
+    flex-wrap: wrap; /* desktop: wrap to multiple rows as needed */
   }
-  .toolbar::-webkit-scrollbar { display: none; } /* Chrome/Safari/iOS */
-  .toolbar > * { flex-shrink: 0; } /* every direct child stays its natural width */
-  .toolbar-title { font-family: var(--mono); font-size: 0.7rem; font-weight: 600; color: var(--accent); margin-right: 0.5rem; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
+  /* Narrow screens: single scrollable row instead of wrapping */
+  @media (max-width: 768px) {
+    .toolbar {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .toolbar::-webkit-scrollbar { display: none; }
+    .toolbar > * { flex-shrink: 0; }
+  }
+  .toolbar-title { font-family: var(--mono); font-size: 0.7rem; font-weight: 600; color: var(--accent); margin-right: 0.5rem; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
   .tb-sep { width: 1px; height: 24px; background: var(--border); margin: 0 0.35rem; flex-shrink: 0; }
   .tb-btn { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 1rem; transition: all 0.15s ease; flex-shrink: 0; font-family: var(--mono); }
   .tb-btn svg { width: 18px; height: 18px; display: block; pointer-events: none; }
@@ -330,7 +335,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx or .epub file to start reading
   </p>
-  <p class="version-label">v2.6</p>
+  <p class="version-label">v2.7</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -361,7 +366,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.6</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.7</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
