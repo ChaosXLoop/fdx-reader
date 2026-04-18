@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fdx-reader-v33';
+const CACHE_NAME = 'fdx-reader-v34';
 const ASSETS = [
   './',
   './index.html',
