@@ -14,6 +14,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
 
@@ -337,17 +338,17 @@
   <h1>FDX <span class="accent">Script Reader</span></h1>
   <p class="subtitle">
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
-    Open an .fdx or .epub file to start reading
+    Open an .fdx, .epub, or .pdf file to start reading
   </p>
-  <p class="version-label">v2.10</p>
+  <p class="version-label">v2.11</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
       <div class="icon">&#x1F4DC;</div>
-      <h2>Drop your .fdx or .epub here</h2>
+      <h2>Drop your .fdx, .epub, or .pdf here</h2>
       <p>or <span>browse to select</span></p>
     </div>
-    <input type="file" id="fileInput" accept=".fdx,.epub"/>
+    <input type="file" id="fileInput" accept=".fdx,.epub,.pdf"/>
 
     <div class="url-loader">
       <div class="section-label">Load from URL</div>
@@ -370,10 +371,10 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.10</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.11</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
-    <input type="file" id="fileInputApp" accept=".fdx,.epub" style="display:none"/>
+    <input type="file" id="fileInputApp" accept=".fdx,.epub,.pdf" style="display:none"/>
     <div class="tb-sep"></div>
     <span class="tb-label">Aa</span>
     <button class="tb-btn" id="btnFontDn">&#x2212;</button>
@@ -592,7 +593,8 @@ async function loadLibrary() {
     for (const item of scripts) {
       const row = document.createElement('div');
       row.className = 'library-item';
-      const ext = (item.file || '').toLowerCase().endsWith('.epub') ? 'EPUB' : 'FDX';
+      const f = (item.file || '').toLowerCase();
+      const ext = f.endsWith('.epub') ? 'EPUB' : f.endsWith('.pdf') ? 'PDF' : 'FDX';
       const metaBits = [];
       if (item.author) metaBits.push(item.author);
       if (item.episode) metaBits.push(item.episode);
@@ -718,8 +720,12 @@ function loadFile(file, filename, sourceUrl) {
     file.arrayBuffer().then(buf => parseEpub(buf, filename || file.name))
       .then(data => activateScript(data, sourceUrl))
       .catch(err => showToast('EPUB parse error: ' + err.message));
+  } else if (name.endsWith('.pdf')) {
+    file.arrayBuffer().then(buf => parsePDF(buf, filename || file.name))
+      .then(data => activateScript(data, sourceUrl))
+      .catch(err => showToast('PDF parse error: ' + err.message));
   } else {
-    showToast('Please select a .fdx or .epub file');
+    showToast('Please select a .fdx, .epub, or .pdf file');
   }
 }
 // Backwards-compatible alias
@@ -876,6 +882,109 @@ function parseFDX(xmlString, filename) {
     }
   }
   return { ...titleInfo, paragraphs, sourceFilename: filename };
+}
+
+// ── PDF PARSER ─────────────────────────────────────────────────────────────
+// Extracts text from each page using PDF.js, then classifies each line into
+// a screenplay element type by its x-position relative to the page width.
+// Standard US-Letter screenplay layout (612pt wide, 1" margins, Courier 12pt):
+//   Action / Scene Heading : x ≈  72pt  →  xFrac ≈ 0.12
+//   Dialogue               : x ≈ 144pt  →  xFrac ≈ 0.24
+//   Parenthetical          : x ≈ 173pt  →  xFrac ≈ 0.28
+//   Character              : x ≈ 216pt  →  xFrac ≈ 0.35
+//   Transition (right-al.) : x ≈ 400+pt →  xFrac > 0.60
+// Scene headings share the action indent but are ALL CAPS and start with
+// INT. / EXT. / INT./EXT. etc.  Other ALL-CAPS action lines stay as Action.
+async function parsePDF(arrayBuffer, filename) {
+  if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js not loaded');
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+
+  // Pull title / author from PDF metadata if available
+  let title = '', author = '';
+  try {
+    const meta = await pdf.getMetadata();
+    title  = (meta.info && meta.info.Title)  || '';
+    author = (meta.info && meta.info.Author) || '';
+  } catch (_) {}
+  if (!title) title = filename.replace(/\.pdf$/i, '').replace(/[_-]/g, ' ');
+
+  const SCENE_RE = /^(INT|EXT|INT\.\/EXT|EXT\.\/INT|I\/E)[\.\s]/i;
+
+  const classified = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const vp   = page.getViewport({ scale: 1 });
+    const tc   = await page.getTextContent();
+
+    // Group items that share the same y-position (±3pt) into a single line
+    const lineMap = new Map();
+    for (const item of tc.items) {
+      if (!item.str || !item.str.trim()) continue;
+      const x = item.transform[4];
+      const y = item.transform[5];
+      const bucket = Math.round(y / 3) * 3;
+      if (!lineMap.has(bucket)) lineMap.set(bucket, { y, minX: x, parts: [] });
+      const ln = lineMap.get(bucket);
+      ln.parts.push({ x, text: item.str });
+      if (x < ln.minX) ln.minX = x;
+    }
+
+    // Sort top→bottom (PDF y=0 is bottom of page, so descending y = visual top)
+    const lines = [...lineMap.values()].sort((a, b) => b.y - a.y);
+
+    for (const ln of lines) {
+      ln.parts.sort((a, b) => a.x - b.x);
+      const raw = ln.parts.map(p => p.text).join('').trim();
+      if (!raw) continue;
+
+      // Skip page numbers: short text near the very top or bottom of the page
+      const yFrac = ln.y / vp.height;
+      if ((yFrac > 0.93 || yFrac < 0.05) && raw.length < 12) continue;
+
+      const xFrac   = ln.minX / vp.width;
+      const allCaps = raw === raw.toUpperCase() && /[A-Z]/.test(raw);
+
+      let type;
+      if (xFrac > 0.60) {
+        type = 'Transition';
+      } else if (xFrac >= 0.30 && xFrac < 0.58) {
+        type = allCaps ? 'Character' : 'Dialogue';
+      } else if (xFrac >= 0.22 && xFrac < 0.30) {
+        type = raw.startsWith('(') ? 'Parenthetical' : 'Dialogue';
+      } else if (xFrac >= 0.15 && xFrac < 0.22) {
+        type = 'Dialogue';
+      } else {
+        // Left margin: distinguish Scene Heading from Action by content
+        type = (allCaps && SCENE_RE.test(raw)) ? 'Scene Heading' : 'Action';
+      }
+
+      classified.push({ type, text: esc(raw), plain: raw, fdxPage: String(pageNum), _y: ln.y, _page: pageNum });
+    }
+  }
+
+  // Merge consecutive same-type lines that are on the same page and close
+  // in y-space (≤ 18pt apart = single-spaced) into one paragraph block.
+  // Only merge Action and Dialogue — other types are typically one line each.
+  const MERGE_TYPES = new Set(['Action', 'Dialogue']);
+  const paragraphs = [];
+  for (const ln of classified) {
+    const prev = paragraphs[paragraphs.length - 1];
+    if (prev && MERGE_TYPES.has(ln.type) && prev.type === ln.type
+        && prev._page === ln._page && Math.abs(prev._y - ln._y) <= 18) {
+      prev.text  += ' ' + ln.text;
+      prev.plain += ' ' + ln.plain;
+      prev._y     = ln._y;
+    } else {
+      paragraphs.push({ ...ln });
+    }
+  }
+  for (const p of paragraphs) { delete p._y; delete p._page; }
+
+  return { title, author, episode: '', paragraphs, sourceFilename: filename };
 }
 
 // ── EPUB PARSER ────────────────────────────────────────────────────────────
