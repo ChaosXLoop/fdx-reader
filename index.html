@@ -171,6 +171,7 @@
   .tb-btn.mode-draw.active { background: rgba(229, 77, 77, 0.12); border-color: var(--error); color: var(--error); }
   .tb-btn.mode-note.active { background: rgba(250, 204, 21, 0.12); border-color: #facc15; color: #facc15; }
   .tb-label { font-family: var(--mono); font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; margin: 0 0.25rem; }
+  .tb-label svg { width: 15px; height: 15px; display: block; }
   .font-size-display { font-family: var(--mono); font-size: 0.7rem; color: var(--text); min-width: 32px; text-align: center; }
   .color-swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
   .color-swatch:hover { transform: scale(1.15); }
@@ -185,7 +186,11 @@
 
   /* ── READER ───────────────────────────────────────────────────────── */
   .reader-wrap { flex: 1; overflow-y: auto; overflow-x: hidden; background: var(--reader-bg); -webkit-overflow-scrolling: touch; }
-  .reader { position: relative; max-width: 720px; margin: 0 auto; padding: 2rem 2.5rem 6rem; font-family: "Courier New", Courier, monospace; font-size: var(--script-font-size); line-height: 1.35; color: var(--reader-text); }
+  /* Column width and side padding are driven by the page-margin control.
+     Every script element indents with a percentage of this column (dialogue
+     20%, parenthetical 25%) or centres/right-aligns within it, so narrowing
+     or widening the column rescales the whole screenplay layout in step. */
+  .reader { position: relative; max-width: var(--reader-max, 720px); margin: 0 auto; padding: 2rem var(--page-pad, 2.5rem) 6rem; font-family: "Courier New", Courier, monospace; font-size: var(--script-font-size); line-height: 1.35; color: var(--reader-text); }
   .annotation-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
   .annotation-layer.active { pointer-events: all; cursor: crosshair; touch-action: none; }
   .annotation-layer path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
@@ -340,7 +345,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx, .epub, or .pdf file to start reading
   </p>
-  <p class="version-label">v2.12</p>
+  <p class="version-label">v2.13</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -371,7 +376,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.12</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.13</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub,.pdf" style="display:none"/>
@@ -380,6 +385,13 @@
     <button class="tb-btn" id="btnFontDn">&#x2212;</button>
     <span class="font-size-display" id="fontSizeDisplay">14</span>
     <button class="tb-btn" id="btnFontUp">&#x002B;</button>
+    <div class="tb-sep"></div>
+    <!-- Inline SVG, not a glyph: the Kindle Scribe browser renders neither
+         emoji nor uncommon Unicode arrows, so every toolbar icon is drawn. -->
+    <span class="tb-label" title="Page margins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v18M16 3v18"/></svg></span>
+    <button class="tb-btn" id="btnMarginDn" title="Narrower margins — more text per line ([)">&#x2212;</button>
+    <span class="font-size-display" id="marginDisplay">5</span>
+    <button class="tb-btn" id="btnMarginUp" title="Wider margins — narrower text column (])">&#x002B;</button>
     <div class="tb-sep"></div>
     <button class="tb-btn mode-draw" id="btnDraw" title="Draw (D)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/></svg></button>
     <button class="tb-btn mode-erase" id="btnErase" title="Eraser (E)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3l5 5-11 11H5l-2-2z"/><path d="M9 10l5 5"/></svg></button>
@@ -552,7 +564,7 @@ const $ = id => document.getElementById(id);
 const landing = $('landing'), dropZone = $('dropZone'), fileInput = $('fileInput');
 const app = $('app'), toolbarTitle = $('toolbarTitle');
 const fileInputApp = $('fileInputApp');
-const fontSizeDisplay = $('fontSizeDisplay');
+const fontSizeDisplay = $('fontSizeDisplay'), marginDisplay = $('marginDisplay');
 const readerWrap = $('readerWrap'), reader = $('reader');
 const textLayer = $('textLayer'), annotationLayer = $('annotationLayer');
 const modeBadge = $('modeBadge'), toast = $('toast');
@@ -1297,8 +1309,37 @@ function setFontSize(size) {
   fontSize = size;
   fontSizeDisplay.textContent = size;
   reader.style.setProperty('--script-font-size', size + 'px');
+  localStorage.setItem('fdx-font-size', size);
   requestAnimationFrame(() => { rerenderAnnotations(); resizeAnnotationLayer(); });
 }
+
+// ── PAGE MARGINS ───────────────────────────────────────────────────────────
+// One knob, 0–10, that sets how much of the screen the script column uses.
+// Level 5 reproduces the original fixed layout (720px column, 2.5rem pad);
+// lower levels widen the column and shrink the padding to fit more text per
+// line (useful on e-ink and wide screens), higher levels do the reverse.
+//
+// Only the column is resized — the per-element indents stay percentages of
+// it (dialogue 20%, parenthetical 25%) or centre/right-align within it, so
+// action, dialogue, character, parenthetical and transition all keep their
+// relative screenplay geometry at every level.
+const MARGIN_DEFAULT = 5;
+let pageMargin = MARGIN_DEFAULT;
+
+function setPageMargin(level) {
+  level = Math.max(0, Math.min(10, level));
+  pageMargin = level;
+  marginDisplay.textContent = level;
+  // level 0 → 995px / 0rem,  5 → 720px / 2.5rem,  10 → 445px / 5rem
+  reader.style.setProperty('--reader-max', (720 + (MARGIN_DEFAULT - level) * 55) + 'px');
+  reader.style.setProperty('--page-pad', (level * 0.5) + 'rem');
+  localStorage.setItem('fdx-page-margin', level);
+  // Text reflows, so strokes and notes must be repositioned — same as fonts
+  requestAnimationFrame(() => { rerenderAnnotations(); rerenderNotes(); resizeAnnotationLayer(); });
+}
+
+$('btnMarginDn').addEventListener('click', () => setPageMargin(pageMargin - 1));
+$('btnMarginUp').addEventListener('click', () => setPageMargin(pageMargin + 1));
 
 // ── SVG LAYER SIZING ───────────────────────────────────────────────────────
 function resizeAnnotationLayer() {
@@ -1343,6 +1384,14 @@ function applyGrayscale() {
 }
 applyGrayscale();
 btnGrayscale.addEventListener('click', () => { grayscaleOn = !grayscaleOn; applyGrayscale(); });
+
+// ── RESTORE SAVED READING PREFERENCES ────────────────────────────────────
+(function restoreReadingPrefs() {
+  const savedFont = parseInt(localStorage.getItem('fdx-font-size'), 10);
+  if (!isNaN(savedFont)) setFontSize(savedFont);
+  const savedMargin = parseInt(localStorage.getItem('fdx-page-margin'), 10);
+  setPageMargin(isNaN(savedMargin) ? MARGIN_DEFAULT : savedMargin);
+})();
 
 // ── POINTER / TOUCH EVENTS (DRAW) ─────────────────────────────────────────
 // We register both Pointer Events and Touch Events listeners. On browsers
@@ -2450,7 +2499,11 @@ $('pageDown').addEventListener('click', () => pageScroll(1));
 
 // ── KEYBOARD ───────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
-  if (e.target.tagName==='TEXTAREA') return;
+  // Never steal keys while the user is typing — the bare shortcuts below
+  // ('-', '[', ']', 'd'…) are ordinary characters in a URL, token or note.
+  const t = e.target;
+  if (t && (t.tagName==='TEXTAREA' || t.tagName==='INPUT' || t.tagName==='SELECT'
+            || t.isContentEditable)) return;
   if (e.ctrlKey||e.metaKey) {
     if (e.key==='z'){e.preventDefault();undoLast();}
     if (e.key==='s'){e.preventDefault();saveAnnotations();}
@@ -2460,6 +2513,8 @@ document.addEventListener('keydown', e => {
     if (e.key==='e') setMode(currentMode==='erase'?'read':'erase');
     if (e.key==='n') setMode(currentMode==='note'?'read':'note');
   }
+  if (e.key==='[') setPageMargin(pageMargin-1);
+  if (e.key===']') setPageMargin(pageMargin+1);
   if (e.key==='+'||e.key==='=') setFontSize(fontSize+1);
   if (e.key==='-') setFontSize(fontSize-1);
   if (e.key==='Escape') setMode('read');
