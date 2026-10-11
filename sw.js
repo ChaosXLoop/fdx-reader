@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fdx-reader-v39';
+const CACHE_NAME = 'fdx-reader-v40';
 const ASSETS = [
   './',
   './index.html',
@@ -41,6 +41,10 @@ self.addEventListener('fetch', e => {
   // Never cache or intercept GitHub API calls — they must always go
   // straight to the network so SHA lookups and writes see fresh data.
   if (url.hostname === 'api.github.com') return;
+
+  // Same for ElevenLabs: voice lists and synthesised audio are authenticated
+  // and must never be served from, or written to, the app-shell cache.
+  if (url.hostname === 'api.elevenlabs.io') return;
 
   if (isLibraryContent) {
     // Network-first for library content

@@ -202,6 +202,75 @@
   .layer-select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; font-family: var(--mono); font-size: 0.7rem; max-width: 140px; margin-left: 4px; cursor: pointer; }
   .layer-select:focus { outline: none; border-color: var(--accent); }
 
+  /* ── TABLE READ ───────────────────────────────────────────────────── */
+  /* Voice chip shown beside each character cue. A button that opens the
+     shared picker, not a <select>: a long script has hundreds of cues, and
+     that many native selects (x ~40 voices of <option>) is far too heavy
+     for the e-ink browsers this app targets. */
+  .voice-chip { display: inline-block; margin-left: 0.6em; padding: 0 0.4em; font-family: var(--mono); font-size: 0.6em; line-height: 1.8; letter-spacing: 0.04em; vertical-align: middle; max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 4px; cursor: pointer; color: var(--accent); background: var(--accent-glow); border: 1px solid var(--accent-dim); }
+  .voice-chip.unset { color: var(--text-dim); background: transparent; border-color: var(--border); }
+  .voice-chip:hover { border-color: var(--accent); }
+  /* Outline only — no size change, so annotation strokes stay aligned */
+  .reading-now { box-shadow: 0 0 0 4px var(--accent-glow); border-radius: 4px; background: var(--accent-glow); }
+
+  /* Casting panel */
+  .cast-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 520; visibility: hidden; opacity: 0; transition: opacity 0.15s; }
+  .cast-overlay.visible { visibility: visible; opacity: 1; }
+  .cast-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 100%; max-width: 520px; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; font-family: var(--sans); }
+  .cast-head { flex-shrink: 0; padding: 0.9rem 1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
+  .cast-head h3 { font-size: 1rem; margin: 0; flex: 1; font-family: var(--mono); color: var(--accent); }
+  .cast-body { flex: 1; overflow-y: auto; padding: 1rem; -webkit-overflow-scrolling: touch; }
+  .cast-foot { flex-shrink: 0; padding: 0.8rem 1rem; border-top: 1px solid var(--border); background: var(--surface); }
+  .cast-sect { margin-bottom: 1.4rem; }
+  .cast-sect > h4 { font-family: var(--mono); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin: 0 0 0.6rem; font-weight: 600; }
+  .cast-note { font-size: 0.72rem; color: var(--text-dim); line-height: 1.5; margin: 0.5rem 0 0; }
+  .cast-row { display: flex; align-items: center; padding: 0.45rem 0.5rem; border-radius: 7px; border: 1px solid transparent; }
+  .cast-row + .cast-row { margin-top: 0.2rem; }
+  .cast-row:hover { background: var(--surface-raised); }
+  .cast-row.narrator { background: var(--accent-glow); border-color: var(--accent-dim); }
+  .cast-row .who { flex: 1; min-width: 0; margin-right: 0.5rem; }
+  .cast-row .who b { display: block; font-size: 0.82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cast-row .who span { display: block; font-family: var(--mono); font-size: 0.6rem; color: var(--text-dim); margin-top: 0.1rem; }
+  .cast-sel { flex-shrink: 0; width: 150px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-family: var(--mono); font-size: 0.68rem; cursor: pointer; }
+  .cast-sel:focus { outline: none; border-color: var(--accent); }
+  .cast-sel.unset { color: var(--text-dim); }
+  .cast-prev { flex-shrink: 0; margin-left: 4px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-raised); color: var(--text-dim); cursor: pointer; }
+  .cast-prev svg { width: 13px; height: 13px; }
+  .cast-prev:hover { color: var(--accent); border-color: var(--accent); }
+  .cast-opt { display: flex; align-items: center; font-size: 0.78rem; padding: 0.25rem 0; cursor: pointer; }
+  .cast-opt input { margin-right: 0.5rem; }
+  .cast-key { display: flex; align-items: center; }
+  .cast-key input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.6rem; color: var(--text); font-family: var(--mono); font-size: 0.72rem; }
+  .cast-key input:focus { outline: none; border-color: var(--accent); }
+  .cast-key .modal-btn { margin-left: 0.4rem; flex-shrink: 0; }
+  .cast-start { width: 100%; padding: 0.65rem; border-radius: 7px; border: 1px solid var(--accent); background: var(--accent-glow); color: var(--accent); font-family: var(--mono); font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+  .cast-start:disabled { opacity: 0.45; cursor: default; }
+
+  /* Voice picker (opened from a chip) */
+  .vp-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 540; visibility: hidden; opacity: 0; transition: opacity 0.15s; }
+  .vp-overlay.visible { visibility: visible; opacity: 1; }
+  .vp-box { position: relative; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; max-width: 380px; max-height: 80vh; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; font-family: var(--sans); }
+  .vp-head { flex-shrink: 0; padding: 0.9rem 1rem 0.6rem; border-bottom: 1px solid var(--border); }
+  .vp-head h3 { margin: 0 0 0.5rem; font-size: 0.95rem; font-family: var(--mono); color: var(--accent); }
+  .vp-head input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.45rem 0.6rem; color: var(--text); font-family: var(--mono); font-size: 0.75rem; }
+  .vp-head input:focus { outline: none; border-color: var(--accent); }
+  .vp-list { flex: 1; overflow-y: auto; padding: 0.5rem; -webkit-overflow-scrolling: touch; }
+  .vp-item { display: flex; align-items: center; width: 100%; text-align: left; padding: 0.5rem 0.6rem; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--text); cursor: pointer; font-family: var(--sans); }
+  .vp-item:hover { background: var(--surface-raised); }
+  .vp-item.active { border-color: var(--accent); background: var(--accent-glow); }
+  .vp-item .vn { flex: 1; min-width: 0; }
+  .vp-item .vn b { display: block; font-size: 0.8rem; font-weight: 600; }
+  .vp-item .vn span { display: block; font-family: var(--mono); font-size: 0.58rem; color: var(--text-dim); margin-top: 0.1rem; }
+  .vp-foot { flex-shrink: 0; padding: 0.7rem 1rem; border-top: 1px solid var(--border); text-align: right; }
+
+  /* Playback bar — a centred pill, clear of the corner page-nav buttons */
+  .play-bar { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); z-index: 480; display: flex; align-items: center; max-width: 94vw; padding: 0.45rem 0.6rem; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 4px 18px rgba(0,0,0,0.35); visibility: hidden; opacity: 0; transition: opacity 0.15s; font-family: var(--mono); }
+  .play-bar.visible { visibility: visible; opacity: 1; }
+  .play-bar .tb-btn { width: 32px; height: 32px; }
+  .play-now { min-width: 0; max-width: 300px; margin: 0 0.5rem; }
+  .play-now b { display: block; font-size: 0.62rem; color: var(--accent); letter-spacing: 0.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .play-now span { display: block; font-size: 0.6rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.1rem; }
+
   /* ── SCRIPT ELEMENTS ──────────────────────────────────────────────── */
   .sp-title-page { text-align: center; padding: 4em 0 3em; border-bottom: 1px solid var(--border); margin-bottom: 2em; }
   .sp-title-page .sp-title { font-size: 1.5em; font-weight: bold; text-transform: uppercase; margin-bottom: 1em; }
@@ -345,7 +414,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx, .epub, or .pdf file to start reading
   </p>
-  <p class="version-label">v2.13</p>
+  <p class="version-label">v2.14</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -376,7 +445,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.13</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.14</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub,.pdf" style="display:none"/>
@@ -460,6 +529,10 @@
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnEpub" title="Export to EPUB"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h8a3 3 0 0 1 3 3v14a2 2 0 0 0-2-2H4z"/><path d="M20 4h-5a3 3 0 0 0-3 3"/><path d="M20 4v15h-6a2 2 0 0 0-2 2"/></svg></button>
     <div class="tb-sep"></div>
+    <button class="tb-btn" id="btnRead" title="Start table read (R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>
+    <button class="tb-btn" id="btnCast" title="Casting — assign voices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></button>
+    <button class="tb-btn" id="btnChips" title="Show/hide voice tags beside character names"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0l-7.2-7.2a2 2 0 0 1-.6-1.4V4a1 1 0 0 1 1-1h8a2 2 0 0 1 1.4.6l7.4 7.4a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></button>
+    <div class="tb-sep"></div>
     <button class="tb-btn" id="btnTheme" title="Toggle light/dark mode"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg></button>
     <button class="tb-btn" id="btnGrayscale" title="Toggle grayscale for e-readers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg></button>
     <button class="tb-btn" id="btnGithub" title="Library sync (GitHub token)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -497,6 +570,79 @@
     <button class="modal-btn primary" id="confirmYes">OK</button>
   </div>
 </div>
+<!-- Casting panel: API key, read settings, and the voice assigned to the
+     narrator and to every speaking character in the loaded script. -->
+<div class="cast-overlay" id="castOverlay">
+  <div class="cast-panel">
+    <div class="cast-head">
+      <h3>Casting</h3>
+      <button class="tb-btn" id="castRefresh" title="Reload voices from ElevenLabs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
+      <button class="tb-btn" id="castClose" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="cast-body">
+      <div class="cast-sect">
+        <h4>ElevenLabs API key</h4>
+        <div class="cast-key">
+          <input type="password" id="castKeyInput" autocomplete="off" spellcheck="false" placeholder="sk_..."/>
+          <button class="modal-btn primary" id="castKeySave">Save</button>
+        </div>
+        <p class="cast-note" id="castKeyNote">Stored in this browser only. Create one at elevenlabs.io under Profile &rarr; API Keys. Voice generation is billed to your own ElevenLabs account per character spoken.</p>
+      </div>
+
+      <div class="cast-sect">
+        <h4>Voices</h4>
+        <div id="castList"><p class="cast-note">Add an API key to load your voices.</p></div>
+      </div>
+
+      <div class="cast-sect">
+        <h4>What to read</h4>
+        <label class="cast-opt"><input type="checkbox" id="optAction"/> Action lines (narrator)</label>
+        <label class="cast-opt"><input type="checkbox" id="optScene"/> Scene headings (narrator)</label>
+        <label class="cast-opt"><input type="checkbox" id="optParen"/> Parentheticals</label>
+        <label class="cast-opt"><input type="checkbox" id="optTrans"/> Transitions (narrator)</label>
+        <label class="cast-opt"><input type="checkbox" id="optAnnounce"/> Announce character names</label>
+      </div>
+
+      <div class="cast-sect">
+        <h4>Quality</h4>
+        <select class="cast-sel" id="optModel" style="width:100%">
+          <option value="eleven_flash_v2_5">Flash v2.5 — fastest, lowest cost</option>
+          <option value="eleven_multilingual_v2">Multilingual v2 — most stable long-form</option>
+          <option value="eleven_v3">v3 — most expressive</option>
+        </select>
+        <p class="cast-note" id="castEstimate"></p>
+      </div>
+    </div>
+    <div class="cast-foot">
+      <button class="cast-start" id="castStart">Start table read</button>
+    </div>
+  </div>
+</div>
+
+<!-- Voice picker, shared by the inline chips -->
+<div class="vp-overlay" id="vpOverlay">
+  <div class="vp-box">
+    <div class="vp-head">
+      <h3 id="vpTitle">Voice</h3>
+      <input type="text" id="vpFilter" autocomplete="off" spellcheck="false" placeholder="Filter voices&hellip;"/>
+    </div>
+    <div class="vp-list" id="vpList"></div>
+    <div class="vp-foot">
+      <button class="modal-btn secondary" id="vpClear">No voice</button>
+      <button class="modal-btn secondary" id="vpCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Playback bar, visible only during a table read -->
+<div class="play-bar" id="playBar">
+  <button class="tb-btn" id="playPrev" title="Previous line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 20L9 12l10-8z"/><path d="M5 19V5"/></svg></button>
+  <button class="tb-btn" id="playPause" title="Pause"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg></button>
+  <button class="tb-btn" id="playNext" title="Next line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l10 8-10 8z"/><path d="M19 5v14"/></svg></button>
+  <div class="play-now"><b id="playWho">&nbsp;</b><span id="playTxt">&nbsp;</span></div>
+  <button class="tb-btn" id="playStop" title="Stop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+</div>
+
 <button class="page-nav prev" id="pageUp" title="Page up">&#x25B2;</button>
 <button class="page-nav next" id="pageDown" title="Page down">&#x25BC;</button>
 
@@ -1245,10 +1391,19 @@ function renderScript() {
     const cls = { 'Scene Heading':'sp-scene-heading','Action':'sp-action','Character':'sp-character',
       'Parenthetical':'sp-parenthetical','Dialogue':'sp-dialogue',
       'Transition': isActBreak(p.text)?'sp-act-break':'sp-transition' }[p.type] || 'sp-action';
-    html += '<p class="'+cls+'" data-idx="'+i+'">'+wrapWords(p.text, i)+'</p>';
+    // Character cues carry their normalised name so the table-read voice
+    // chips can be attached (and re-attached) without re-parsing the text.
+    let attrs = ' data-idx="'+i+'"';
+    if (p.type === 'Character') {
+      const cn = normalizeCharacterName(p.plain || stripTags(p.text));
+      if (cn) attrs += ' data-char="'+esc(cn)+'"';
+    }
+    html += '<p class="'+cls+'"'+attrs+'>'+wrapWords(p.text, i)+'</p>';
   });
 
   textLayer.innerHTML = html;
+  loadCastForScript();
+  renderVoiceChips();
   layers = [createLayer('Annotations', 'new', null)];
   activeLayerIdx = 0;
   rerenderAnnotations();
@@ -2497,6 +2652,582 @@ function pageScroll(direction) {
 $('pageUp').addEventListener('click', () => pageScroll(-1));
 $('pageDown').addEventListener('click', () => pageScroll(1));
 
+// ── TABLE READ (ElevenLabs) ───────────────────────────────────────────────
+// Reads the loaded script aloud, giving the narrator and each speaking
+// character its own voice. Audio is synthesised one line at a time, with the
+// next line fetched while the current one plays, and every clip is cached by
+// (voice, model, text) so re-listening never bills the same line twice.
+const NARRATOR = '__narrator__';
+
+let voiceCatalog = [];                 // [{voice_id, name, category, labels}]
+let cast = {};                         // character name -> voice_id
+let chipsVisible = true;
+let readSettings = {
+  readAction: true, readSceneHeadings: true, readParentheticals: false,
+  readTransitions: false, announceCharacters: false, model: 'eleven_flash_v2_5'
+};
+
+// ── API key: same three-tier storage as the GitHub token, because
+// localStorage alone does not survive reloads on the Kindle Scribe.
+let _sessionEleven = null;
+function getElevenKey() {
+  if (_sessionEleven) return _sessionEleven;
+  try { const k = localStorage.getItem('elevenKey'); if (k) { _sessionEleven = k; return k; } } catch (e) {}
+  try { const m = document.cookie.match(/(?:^|;\s*)elKey=([^;]+)/); if (m) { _sessionEleven = decodeURIComponent(m[1]); return _sessionEleven; } } catch (e) {}
+  return null;
+}
+function setElevenKey(k) {
+  _sessionEleven = k;
+  try { localStorage.setItem('elevenKey', k); } catch (e) {}
+  try { document.cookie = 'elKey=' + encodeURIComponent(k) + ';max-age=31536000;path=/;SameSite=Strict'; } catch (e) {}
+}
+function removeElevenKey() {
+  _sessionEleven = null;
+  try { localStorage.removeItem('elevenKey'); } catch (e) {}
+  try { document.cookie = 'elKey=;max-age=0;path=/'; } catch (e) {}
+}
+
+// ── Cast persistence, per script ──────────────────────────────────────────
+function castStorageKey() {
+  const id = (scriptData && (scriptData.sourceFilename || scriptData.title)) || 'default';
+  return 'fdx-cast:' + id;
+}
+function loadCastForScript() {
+  cast = {};
+  try { cast = JSON.parse(localStorage.getItem(castStorageKey()) || '{}') || {}; } catch (e) { cast = {}; }
+}
+function saveCast() {
+  try { localStorage.setItem(castStorageKey(), JSON.stringify(cast)); } catch (e) {}
+}
+function loadReadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('fdx-read-settings') || 'null');
+    if (s) Object.assign(readSettings, s);
+  } catch (e) {}
+  try { chipsVisible = localStorage.getItem('fdx-voice-chips') !== 'off'; } catch (e) {}
+}
+function saveReadSettings() {
+  try { localStorage.setItem('fdx-read-settings', JSON.stringify(readSettings)); } catch (e) {}
+}
+
+// ── Script analysis ───────────────────────────────────────────────────────
+// "KEVIN (V.O.)", "KEVIN (CONT'D)" and "KEVIN" are one cast member, so the
+// cue is reduced to its bare name. Repeated to strip stacked extensions.
+function normalizeCharacterName(raw) {
+  let s = stripTags(String(raw || '')).trim();
+  for (let i = 0; i < 3; i++) s = s.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  return s.replace(/[:\s]+$/, '').replace(/\s+/g, ' ').toUpperCase();
+}
+
+// Every speaking character, ordered by how much they say.
+function extractCast() {
+  const map = new Map();
+  if (!scriptData) return [];
+  const pars = scriptData.paragraphs;
+  pars.forEach((p, i) => {
+    if (p.type !== 'Character') return;
+    const name = normalizeCharacterName(p.plain || p.text);
+    if (!name) return;
+    if (!map.has(name)) map.set(name, { name: name, cues: 0, words: 0, firstIdx: i });
+    const e = map.get(name);
+    e.cues++;
+    for (let j = i + 1; j < pars.length; j++) {
+      if (pars[j].type === 'Parenthetical') continue;
+      if (pars[j].type !== 'Dialogue') break;
+      e.words += String(pars[j].plain || '').split(/\s+/).filter(Boolean).length;
+    }
+  });
+  return Array.from(map.values()).sort((a, b) => b.words - a.words || a.name.localeCompare(b.name));
+}
+
+// Flatten the script into the ordered list of lines to speak.
+function buildReadQueue() {
+  const q = [];
+  if (!scriptData) return q;
+  let who = NARRATOR;
+  scriptData.paragraphs.forEach((p, i) => {
+    const txt = String(p.plain || stripTags(p.text) || '').trim();
+    if (!txt) return;
+    if (p.type === 'Character') {
+      who = normalizeCharacterName(txt) || NARRATOR;
+      if (readSettings.announceCharacters) q.push({ idx: i, text: txt, who: NARRATOR });
+    } else if (p.type === 'Dialogue') {
+      q.push({ idx: i, text: txt, who: who });
+    } else if (p.type === 'Parenthetical') {
+      if (readSettings.readParentheticals) q.push({ idx: i, text: txt, who: who });
+    } else if (p.type === 'Scene Heading') {
+      who = NARRATOR;
+      if (readSettings.readSceneHeadings) q.push({ idx: i, text: txt, who: NARRATOR });
+    } else if (p.type === 'Transition') {
+      who = NARRATOR;
+      if (readSettings.readTransitions) q.push({ idx: i, text: txt, who: NARRATOR });
+    } else { // Action and anything unclassified
+      who = NARRATOR;
+      if (readSettings.readAction) q.push({ idx: i, text: txt, who: NARRATOR });
+    }
+  });
+  return q;
+}
+
+function voiceFor(who) { return cast[who] || cast[NARRATOR] || null; }
+function voiceName(id) {
+  if (!id) return null;
+  const v = voiceCatalog.find(v => v.voice_id === id);
+  return v ? v.name : 'voice set';
+}
+
+// ── ElevenLabs calls ──────────────────────────────────────────────────────
+async function elevenError(res) {
+  let msg = 'HTTP ' + res.status;
+  if (res.status === 401) msg = 'API key rejected';
+  else if (res.status === 429) msg = 'Rate limit or quota exceeded';
+  try {
+    const j = JSON.parse(await res.text());
+    const d = j && j.detail;
+    if (d && d.message) msg += ' — ' + d.message;
+    else if (typeof d === 'string') msg += ' — ' + d;
+    else if (Array.isArray(d) && d[0] && d[0].msg) msg += ' — ' + d[0].msg;
+  } catch (e) {}
+  return new Error(msg);
+}
+
+async function fetchVoices() {
+  const key = getElevenKey();
+  if (!key) throw new Error('No API key set');
+  // v2 is current; fall back to v1 for older accounts. Both return {voices}.
+  let res = await fetch('https://api.elevenlabs.io/v2/voices?page_size=100',
+    { headers: { 'xi-api-key': key }, cache: 'no-store' });
+  if (res.status === 404) {
+    res = await fetch('https://api.elevenlabs.io/v1/voices',
+      { headers: { 'xi-api-key': key }, cache: 'no-store' });
+  }
+  if (!res.ok) throw await elevenError(res);
+  const data = await res.json();
+  voiceCatalog = (data.voices || []).map(v => ({
+    voice_id: v.voice_id, name: v.name || v.voice_id,
+    category: v.category || '', labels: v.labels || {}
+  }));
+  return voiceCatalog;
+}
+
+const audioCache = new Map();     // "voice|model|text" -> object URL
+function cacheKeyFor(text, voiceId) { return voiceId + '|' + readSettings.model + '|' + text; }
+
+async function synthesize(text, voiceId, signal) {
+  if (!voiceId) throw new Error('No voice assigned');
+  const ck = cacheKeyFor(text, voiceId);
+  if (audioCache.has(ck)) return audioCache.get(ck);
+  const key = getElevenKey();
+  if (!key) throw new Error('No API key set');
+  const res = await fetch(
+    'https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId) +
+    '?output_format=mp3_44100_128',
+    {
+      method: 'POST',
+      headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, model_id: readSettings.model }),
+      signal: signal, cache: 'no-store'
+    });
+  if (!res.ok) throw await elevenError(res);
+  const url = URL.createObjectURL(await res.blob());
+  audioCache.set(ck, url);
+  return url;
+}
+
+// ── Playback ──────────────────────────────────────────────────────────────
+const readAudio = new Audio();      // the table read itself
+const previewAudio = new Audio();   // casting previews, kept separate
+let readQueue = [], readPos = 0, isReading = false, isPaused = false, readAbort = null;
+let _playResolve = null;            // resolves the in-flight playUrl promise
+let _skipTo = null;                 // set by skipLine, consumed by readLoop
+
+function firstVisibleParagraphIdx() {
+  const top = readerWrap.getBoundingClientRect().top;
+  const els = textLayer.querySelectorAll('[data-idx]');
+  for (let i = 0; i < els.length; i++) {
+    if (els[i].getBoundingClientRect().bottom >= top + 4) {
+      return parseInt(els[i].getAttribute('data-idx'), 10) || 0;
+    }
+  }
+  return 0;
+}
+
+function highlightLine(item) {
+  const old = textLayer.querySelector('.reading-now');
+  if (old) old.classList.remove('reading-now');
+  if (!item) return;
+  const el = textLayer.querySelector('[data-idx="' + item.idx + '"]');
+  if (el) {
+    el.classList.add('reading-now');
+    try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
+  }
+  $('playWho').textContent = item.who === NARRATOR ? 'NARRATOR' : item.who;
+  $('playTxt').textContent = item.text.slice(0, 90);
+}
+
+// Resolves when the clip finishes, errors, or is cut short by skip/stop.
+// The resolver is held so endPlayback() can release a loop that is waiting.
+// Resolves with how the clip ended: 'ended', 'error', 'cut' (skip/stop) or
+// 'blocked'. 'blocked' matters — if autoplay is refused, play() rejects
+// instantly, and a loop that treated that as "finished" would tear through
+// the whole script synthesising every line in silence, billing the lot.
+function playUrl(url) {
+  return new Promise(resolve => {
+    _playResolve = resolve;
+    const finish = (how) => { const r = _playResolve; _playResolve = null; if (r) r(how); };
+    readAudio.onended = () => finish('ended');
+    readAudio.onerror = () => finish('error');
+    readAudio.src = url;
+    const p = readAudio.play();
+    if (p && p.catch) p.catch(() => finish('blocked'));
+  });
+}
+function endPlayback() {
+  try { readAudio.pause(); } catch (e) {}
+  const r = _playResolve; _playResolve = null; if (r) r('cut');
+}
+
+async function readLoop() {
+  while (isReading && readPos < readQueue.length) {
+    const item = readQueue[readPos];
+    highlightLine(item);
+    let url;
+    try {
+      url = await synthesize(item.text, voiceFor(item.who), readAbort.signal);
+    } catch (err) {
+      if (err.name === 'AbortError' || !isReading) return;
+      stopRead();
+      showToast('Table read stopped: ' + err.message);
+      return;
+    }
+    if (!isReading) return;
+    // Fetch the next line while this one plays, so playback stays continuous
+    const nxt = readQueue[readPos + 1];
+    if (nxt) synthesize(nxt.text, voiceFor(nxt.who), readAbort.signal).catch(() => {});
+    const how = await playUrl(url);
+    if (!isReading) return;
+    if (how === 'blocked') {
+      stopRead();
+      showToast('Audio was blocked by the browser — tap play again to allow it');
+      return;
+    }
+    if (_skipTo !== null) { readPos = _skipTo; _skipTo = null; }
+    else readPos++;
+  }
+  if (isReading) { stopRead(); showToast('Table read finished'); }
+}
+
+async function startRead(fromParagraphIdx) {
+  if (!scriptData) { showToast('No script loaded'); return; }
+  if (!getElevenKey()) { showToast('Add an ElevenLabs API key in Casting'); openCast(); return; }
+  readQueue = buildReadQueue();
+  if (!readQueue.length) { showToast('Nothing to read — check the Casting options'); return; }
+  // Every line needs a voice. Unassigned characters fall back to the
+  // narrator, so the only hard stop is a line with no voice at all.
+  const unvoiced = readQueue.filter(i => !voiceFor(i.who));
+  if (unvoiced.length) {
+    const who = unvoiced[0].who === NARRATOR ? 'the narrator' : unvoiced[0].who;
+    showToast('No voice for ' + who + ' — assign one in Casting');
+    openCast(); return;
+  }
+  const start = typeof fromParagraphIdx === 'number' ? fromParagraphIdx : firstVisibleParagraphIdx();
+  readPos = Math.max(0, readQueue.findIndex(q => q.idx >= start));
+  if (readPos < 0) readPos = 0;
+  isReading = true; isPaused = false;
+  readAbort = new AbortController();
+  $('playBar').classList.add('visible');
+  updateReadButtons();
+  readLoop();
+}
+
+function stopRead() {
+  isReading = false; isPaused = false; _skipTo = null;
+  if (readAbort) { readAbort.abort(); readAbort = null; }
+  endPlayback();   // release readLoop if it is waiting on a clip
+  try { readAudio.removeAttribute('src'); } catch (e) {}
+  const old = textLayer.querySelector('.reading-now');
+  if (old) old.classList.remove('reading-now');
+  $('playBar').classList.remove('visible');
+  updateReadButtons();
+}
+
+function togglePause() {
+  if (!isReading) return;
+  isPaused = !isPaused;
+  if (isPaused) readAudio.pause(); else readAudio.play().catch(() => {});
+  $('playPause').title = isPaused ? 'Resume' : 'Pause';
+  $('playPause').innerHTML = isPaused
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l14 8-14 8z"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>';
+}
+
+function skipLine(delta) {
+  if (!isReading) return;
+  const next = readPos + delta;
+  if (next < 0 || next >= readQueue.length) return;
+  _skipTo = next;
+  if (isPaused) togglePause();   // resume, so the loop keeps moving
+  endPlayback();
+}
+
+function updateReadButtons() {
+  const b = $('btnRead');
+  b.classList.toggle('active', isReading);
+  b.title = isReading ? 'Stop table read (R)' : 'Start table read (R)';
+}
+
+// ── Inline voice chips ────────────────────────────────────────────────────
+function chipLabel(name) {
+  const id = cast[name];
+  return id ? (voiceName(id) || 'voice') : 'cast…';
+}
+function renderVoiceChips() {
+  if (!textLayer) return;
+  const old = textLayer.querySelectorAll('.voice-chip');
+  for (let i = 0; i < old.length; i++) old[i].remove();
+  if (!chipsVisible) return;
+  const cues = textLayer.querySelectorAll('p.sp-character[data-char]');
+  for (let i = 0; i < cues.length; i++) {
+    const name = cues[i].getAttribute('data-char');
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'voice-chip' + (cast[name] ? '' : ' unset');
+    chip.setAttribute('data-char', name);
+    chip.textContent = chipLabel(name);
+    cues[i].appendChild(chip);
+  }
+}
+function refreshChipLabels() {
+  const chips = textLayer.querySelectorAll('.voice-chip');
+  for (let i = 0; i < chips.length; i++) {
+    const n = chips[i].getAttribute('data-char');
+    chips[i].textContent = chipLabel(n);
+    chips[i].className = 'voice-chip' + (cast[n] ? '' : ' unset');
+  }
+}
+// Capture phase + stopPropagation so a chip tap never also creates a note.
+textLayer.addEventListener('click', e => {
+  const chip = e.target.closest && e.target.closest('.voice-chip');
+  if (!chip) return;
+  e.preventDefault(); e.stopPropagation();
+  pickVoiceFor(chip.getAttribute('data-char'));
+}, true);
+
+async function pickVoiceFor(name) {
+  if (!voiceCatalog.length) {
+    if (!getElevenKey()) { showToast('Add an ElevenLabs API key in Casting'); openCast(); return; }
+    try { showToast('Loading voices…'); await fetchVoices(); }
+    catch (err) { showToast('Could not load voices: ' + err.message); return; }
+  }
+  const picked = await openVoicePicker(name);
+  if (picked === undefined) return;          // cancelled
+  if (picked === null) delete cast[name]; else cast[name] = picked;
+  saveCast(); refreshChipLabels(); renderCastList();
+  showToast(picked ? (name + ' → ' + voiceName(picked)) : (name + ' voice cleared'));
+}
+
+// ── Voice picker ──────────────────────────────────────────────────────────
+function openVoicePicker(name) {
+  return new Promise(resolve => {
+    const ov = $('vpOverlay'), list = $('vpList'), filter = $('vpFilter');
+    $('vpTitle').textContent = name === NARRATOR ? 'Narrator voice' : 'Voice for ' + name;
+    filter.value = '';
+
+    const draw = () => {
+      const q = filter.value.trim().toLowerCase();
+      const cur = cast[name];
+      list.innerHTML = '';
+      voiceCatalog
+        .filter(v => !q || v.name.toLowerCase().indexOf(q) >= 0 ||
+                     String(v.category).toLowerCase().indexOf(q) >= 0)
+        .forEach(v => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'vp-item' + (v.voice_id === cur ? ' active' : '');
+          const bits = [v.category, v.labels && v.labels.gender, v.labels && v.labels.accent]
+            .filter(Boolean).join(' · ');
+          b.innerHTML = '<div class="vn"><b></b><span></span></div>';
+          b.querySelector('b').textContent = v.name;
+          b.querySelector('span').textContent = bits;
+          b.addEventListener('click', () => done(v.voice_id));
+          list.appendChild(b);
+        });
+      if (!list.children.length) list.innerHTML = '<p class="cast-note">No voices match.</p>';
+    };
+
+    const done = (val) => {
+      ov.classList.remove('visible');
+      filter.removeEventListener('input', draw);
+      $('vpCancel').removeEventListener('click', onCancel);
+      $('vpClear').removeEventListener('click', onClear);
+      document.removeEventListener('keydown', onKey, true);
+      resolve(val);
+    };
+    const onCancel = () => done(undefined);
+    const onClear = () => done(null);
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(undefined); } };
+
+    filter.addEventListener('input', draw);
+    $('vpCancel').addEventListener('click', onCancel);
+    $('vpClear').addEventListener('click', onClear);
+    document.addEventListener('keydown', onKey, true);
+    draw();
+    ov.classList.add('visible');
+    setTimeout(() => { try { filter.focus(); } catch (e) {} }, 50);
+  });
+}
+
+// ── Casting panel ─────────────────────────────────────────────────────────
+function voiceOptionsHtml(selected) {
+  let h = '<option value="">— none —</option>';
+  voiceCatalog.forEach(v => {
+    h += '<option value="' + esc(v.voice_id) + '"' +
+         (v.voice_id === selected ? ' selected' : '') + '>' + esc(v.name) + '</option>';
+  });
+  return h;
+}
+
+function renderCastList() {
+  const host = $('castList');
+  if (!scriptData) { host.innerHTML = '<p class="cast-note">Load a script to cast it.</p>'; return; }
+  if (!voiceCatalog.length) {
+    host.innerHTML = '<p class="cast-note">' +
+      (getElevenKey() ? 'No voices loaded yet — use the reload button above.'
+                      : 'Add an API key above to load your voices.') + '</p>';
+    return;
+  }
+  const people = extractCast();
+  const rows = [{ name: NARRATOR, label: 'Narrator', sub: 'action, scene headings', narrator: true }]
+    .concat(people.map(p => ({
+      name: p.name, label: p.name,
+      sub: p.cues + (p.cues === 1 ? ' cue' : ' cues') + ' · ' + p.words + ' words'
+    })));
+
+  host.innerHTML = '';
+  rows.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'cast-row' + (r.narrator ? ' narrator' : '');
+    div.innerHTML =
+      '<div class="who"><b></b><span></span></div>' +
+      '<select class="cast-sel">' + voiceOptionsHtml(cast[r.name] || '') + '</select>' +
+      '<button class="cast-prev" title="Preview voice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l14 8-14 8z"/></svg></button>';
+    div.querySelector('b').textContent = r.label;
+    div.querySelector('span').textContent = r.sub;
+    const sel = div.querySelector('select');
+    if (!cast[r.name]) sel.classList.add('unset');
+    sel.addEventListener('change', () => {
+      if (sel.value) cast[r.name] = sel.value; else delete cast[r.name];
+      sel.classList.toggle('unset', !sel.value);
+      saveCast(); refreshChipLabels(); updateEstimate();
+    });
+    div.querySelector('.cast-prev').addEventListener('click', () => previewVoice(r.name));
+    host.appendChild(div);
+  });
+  updateEstimate();
+}
+
+async function previewVoice(name) {
+  const id = cast[name];
+  if (!id) { showToast('No voice assigned to ' + (name === NARRATOR ? 'the narrator' : name)); return; }
+  try {
+    showToast('Generating preview…');
+    const url = await synthesize(
+      name === NARRATOR ? 'The room falls quiet as the door swings open.'
+                        : "Hello. I'll be reading the part of " + name + '.',
+      id, null);
+    previewAudio.src = url;
+    previewAudio.play().catch(() => {});
+  } catch (err) { showToast('Preview failed: ' + err.message); }
+}
+
+function updateEstimate() {
+  const q = buildReadQueue();
+  const chars = q.reduce((n, i) => n + i.text.length, 0);
+  const missing = q.filter(i => !voiceFor(i.who)).length;
+  $('castEstimate').textContent =
+    q.length + ' lines · ' + chars.toLocaleString() + ' characters to synthesise' +
+    (missing ? ' · ' + missing + ' line(s) have no voice' : '') +
+    '. ElevenLabs bills per character; cached lines are not re-billed.';
+  $('castStart').disabled = !q.length;
+}
+
+function openCast() {
+  $('castOverlay').classList.add('visible');
+  $('castKeyInput').value = '';
+  $('castKeyInput').placeholder = getElevenKey() ? '(key saved — type a new one to replace)' : 'sk_...';
+  $('castKeySave').textContent = getElevenKey() ? 'Replace' : 'Save';
+  $('optAction').checked = readSettings.readAction;
+  $('optScene').checked = readSettings.readSceneHeadings;
+  $('optParen').checked = readSettings.readParentheticals;
+  $('optTrans').checked = readSettings.readTransitions;
+  $('optAnnounce').checked = readSettings.announceCharacters;
+  $('optModel').value = readSettings.model;
+  renderCastList();
+  if (getElevenKey() && !voiceCatalog.length) reloadVoices();
+}
+function closeCast() { $('castOverlay').classList.remove('visible'); }
+
+async function reloadVoices() {
+  try {
+    showToast('Loading voices…');
+    await fetchVoices();
+    showToast(voiceCatalog.length + ' voices loaded');
+    renderCastList(); refreshChipLabels();
+  } catch (err) {
+    showToast('Could not load voices: ' + err.message);
+    renderCastList();
+  }
+}
+
+// ── Wiring ────────────────────────────────────────────────────────────────
+loadReadSettings();
+
+$('btnRead').addEventListener('click', () => { if (isReading) stopRead(); else startRead(); });
+$('btnCast').addEventListener('click', openCast);
+$('btnChips').addEventListener('click', () => {
+  chipsVisible = !chipsVisible;
+  try { localStorage.setItem('fdx-voice-chips', chipsVisible ? 'on' : 'off'); } catch (e) {}
+  renderVoiceChips();
+  $('btnChips').classList.toggle('active', chipsVisible);
+  showToast(chipsVisible ? 'Voice tags shown' : 'Voice tags hidden');
+  requestAnimationFrame(() => { rerenderAnnotations(); resizeAnnotationLayer(); });
+});
+$('btnChips').classList.toggle('active', chipsVisible);
+
+$('castClose').addEventListener('click', closeCast);
+$('castRefresh').addEventListener('click', reloadVoices);
+$('castOverlay').addEventListener('click', e => { if (e.target === $('castOverlay')) closeCast(); });
+$('castKeySave').addEventListener('click', () => {
+  const v = ($('castKeyInput').value || '').trim();
+  if (v) {
+    setElevenKey(v);
+    $('castKeyInput').value = '';
+    showToast('API key saved');
+    openCast();
+    reloadVoices();
+  } else if (getElevenKey()) {
+    removeElevenKey(); voiceCatalog = [];
+    showToast('API key removed');
+    openCast();
+  }
+});
+$('castStart').addEventListener('click', () => { closeCast(); startRead(0); });
+
+[['optAction','readAction'], ['optScene','readSceneHeadings'], ['optParen','readParentheticals'],
+ ['optTrans','readTransitions'], ['optAnnounce','announceCharacters']].forEach(([id, key]) => {
+  $(id).addEventListener('change', () => {
+    readSettings[key] = $(id).checked; saveReadSettings(); updateEstimate();
+  });
+});
+$('optModel').addEventListener('change', () => {
+  readSettings.model = $('optModel').value; saveReadSettings(); updateEstimate();
+});
+
+$('playPause').addEventListener('click', togglePause);
+$('playStop').addEventListener('click', stopRead);
+$('playPrev').addEventListener('click', () => skipLine(-1));
+$('playNext').addEventListener('click', () => skipLine(1));
+
 // ── KEYBOARD ───────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   // Never steal keys while the user is typing — the bare shortcuts below
@@ -2512,6 +3243,8 @@ document.addEventListener('keydown', e => {
     if (e.key==='d') setMode(currentMode==='draw'?'read':'draw');
     if (e.key==='e') setMode(currentMode==='erase'?'read':'erase');
     if (e.key==='n') setMode(currentMode==='note'?'read':'note');
+    if (e.key==='r') { if (isReading) stopRead(); else startRead(); }
+    if (e.key===' ' && isReading) { e.preventDefault(); togglePause(); }
   }
   if (e.key==='[') setPageMargin(pageMargin-1);
   if (e.key===']') setPageMargin(pageMargin+1);
