@@ -414,7 +414,7 @@
     Reflowable screenplay reader with stylus annotations &amp; sticky notes<br/>
     Open an .fdx, .epub, or .pdf file to start reading
   </p>
-  <p class="version-label">v2.14</p>
+  <p class="version-label">v2.15</p>
 
   <div class="landing-sections">
     <div class="drop-zone" id="dropZone">
@@ -445,7 +445,7 @@
 <div class="app" id="app">
   <div class="toolbar">
     <div class="toolbar-title" id="toolbarTitle"></div>
-    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.14</span>
+    <span class="tb-label" id="appVersion" style="opacity:0.4">v2.15</span>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btnOpen" title="Open FDX"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <input type="file" id="fileInputApp" accept=".fdx,.epub,.pdf" style="display:none"/>
@@ -606,10 +606,14 @@
       <div class="cast-sect">
         <h4>Quality</h4>
         <select class="cast-sel" id="optModel" style="width:100%">
-          <option value="eleven_flash_v2_5">Flash v2.5 — fastest, lowest cost</option>
-          <option value="eleven_multilingual_v2">Multilingual v2 — most stable long-form</option>
-          <option value="eleven_v3">v3 — most expressive</option>
+          <option value="eleven_v4">v4 — most expressive (recommended)</option>
+          <option value="eleven_v3">v3 — expressive</option>
+          <option value="eleven_multilingual_v2">Multilingual v2 — stable long-form</option>
+          <option value="eleven_flash_v2_5">Flash v2.5 — fastest, about half the credits</option>
         </select>
+        <p class="cast-note">v4 works with every voice in the ElevenLabs library. Your own
+          instant or professional voice clones made before v4 launched must be retrained for
+          it first — on elevenlabs.io, hover the voice and click the plus button.</p>
         <p class="cast-note" id="castEstimate"></p>
       </div>
     </div>
@@ -2662,9 +2666,13 @@ const NARRATOR = '__narrator__';
 let voiceCatalog = [];                 // [{voice_id, name, category, labels}]
 let cast = {};                         // character name -> voice_id
 let chipsVisible = true;
+// Bumped when a default changes in a way that should override settings
+// already saved in a browser — see the migration in loadReadSettings().
+const READ_SETTINGS_VERSION = 2;
 let readSettings = {
   readAction: true, readSceneHeadings: true, readParentheticals: false,
-  readTransitions: false, announceCharacters: false, model: 'eleven_flash_v2_5'
+  readTransitions: false, announceCharacters: false,
+  model: 'eleven_v4', v: READ_SETTINGS_VERSION
 };
 
 // ── API key: same three-tier storage as the GitHub token, because
@@ -2702,7 +2710,15 @@ function saveCast() {
 function loadReadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem('fdx-read-settings') || 'null');
-    if (s) Object.assign(readSettings, s);
+    if (s) {
+      const stale = (s.v || 1) < READ_SETTINGS_VERSION;
+      const defaultModel = readSettings.model;
+      Object.assign(readSettings, s);
+      // Settings saved before v4 existed carry an older model id. Move them
+      // onto the current default rather than leaving them pinned to a
+      // superseded engine they never actually chose.
+      if (stale) { readSettings.model = defaultModel; readSettings.v = READ_SETTINGS_VERSION; saveReadSettings(); }
+    }
   } catch (e) {}
   try { chipsVisible = localStorage.getItem('fdx-voice-chips') !== 'off'; } catch (e) {}
 }
